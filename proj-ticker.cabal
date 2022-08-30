@@ -22,14 +22,17 @@ maintainer:         dane.bulat@gmail.com
 extra-source-files: CHANGELOG.md
 
 executable proj-ticker
+    hs-source-dirs:   app, src
     main-is:          Main.hs
     ghc-options:      -threaded
                       -fwarn-incomplete-patterns
-    other-modules:
+    other-modules:    WebTypes
     other-extensions:
     build-depends:    base ^>=4.14.3.0
+                    , hspec
                     , aeson
-                    , brick 
+                    , brick
+                    , bytestring
                     , containers
                     , data-default
                     , http-client
@@ -38,6 +41,26 @@ executable proj-ticker
                     , text
                     , websockets
                     , wuss
-    hs-source-dirs:   app, src
     default-language: Haskell2010
 
+test-suite proj-ticker-test
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test, src 
+    main-is:          tests.hs
+    other-modules:    WebTypes
+    ghc-options:      -Wall -fwarn-tabs
+    build-depends:    base ^>=4.14.3.0
+                    , hspec
+                    , QuickCheck 
+                    , aeson
+                    , brick
+                    , bytestring
+                    , containers
+                    , data-default
+                    , http-client
+                    , lens
+                    , stm
+                    , text
+                    , websockets
+                    , wuss
+    default-language: Haskell2010
