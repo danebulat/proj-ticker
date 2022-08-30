@@ -4,7 +4,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 
 module WebTypes where 
-
+import Control.Applicative ((<|>))
 import Control.Lens.TH 
 import Data.Aeson
 import Data.Default
@@ -18,14 +18,25 @@ import GHC.Generics
 type FixedFloat = Pico 
 
 -- -------------------------------------------------------------------
--- Server Request 
+-- Models 
 
+-- request 
 data ServerRequest = ServerRequest
   { _srqRequestId :: Int        -- 1
   , _srqMethod    :: Text       -- SUBSCRIBE. UNSUBSCRIBE 
   , _srqParams    :: [Text]     -- "btcusdt@miniTicker"
   } deriving (Eq, Show)
 
+-- responses 
+data ServerResponse = ServerResponse
+  { _srpRequestId :: Int        -- 1
+  , _srpResult    :: [Text]     -- null (for subscribe, unsubscribe methods)
+  } deriving (Eq, Show)
+
+-- -------------------------------------------------------------------
+-- JSON Encoding and Decoding
+
+-- server request 
 instance ToJSON ServerRequest where
   toJSON (ServerRequest reqId method params) = object
     [ "id"     .= reqId
@@ -38,4 +49,16 @@ instance FromJSON ServerRequest where
     <$> v .: "id"
     <*> v .: "method"
     <*> v .: "params"
-    
+
+-- server response
+instance ToJSON ServerResponse where
+  toJSON (ServerResponse resId result) = object
+    [ "id"     .= resId
+    , "result" .= result
+    ]
+
+instance FromJSON ServerResponse where
+  parseJSON = withObject "ServerResonse" $ \v -> ServerResponse
+    <$> v .: "id"
+    <*> (v .: "result" <|> pure [])
+
