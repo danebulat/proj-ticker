@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Main where
 
@@ -36,14 +37,14 @@ wsApp conn = do
   killThreads conn [t1]
   sendClose conn (pack "Bye!")
 
--- | Loop for echoing
+-- | Send data to websocket
 sendWs :: WS.Connection -> IO ()
 sendWs conn = do
   putStrLn "> Subscribe? [y/n]"
   i <- getLine
   
   unless (i /= "y") $ do
-    msg <- mkReqIO
+    msg <- mkReq
     sendTextData conn (encode msg)
     sendWs conn
 
@@ -51,8 +52,13 @@ sendWs conn = do
 receiveWs :: WS.Connection -> IO ThreadId
 receiveWs conn = do
   forkIO . forever $ do
-    message <- receiveData conn
-    print (message :: Text)
+    bs <- receiveData conn
+    let msg = decode bs
+    
+    forM_ msg $ \case
+        MsgError    err -> print err
+        MsgResponse res -> print res
+        MsgTicker   t   -> print t
 
 -- | Kill threads
 killThreads :: WS.Connection -> [ThreadId]-> IO ()
@@ -63,8 +69,8 @@ killThreads conn ts = do
 -- -------------------------------------------------------------------
 -- Makers 
 
-mkReq :: ServerRequest
-mkReq = ServerRequest 1 "SUBSCRIBE" ["btcusdt@miniTicker"]
+mkReq :: IO ServerRequest
+mkReq = return $ ServerRequest 1 "SUBSCRIBE" ["btcusdt@miniTicker"]
 
 mkReq' :: Int -> Text -> Text -> ServerRequest
 mkReq' reqId method params = ServerRequest

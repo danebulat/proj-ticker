@@ -68,10 +68,12 @@ instance ToJSON ServerRequest where
     ]
 
 instance FromJSON ServerRequest where
-  parseJSON = withObject "ServerRequest" $ \v -> ServerRequest
-    <$> v .: "id"
-    <*> v .: "method"
-    <*> v .: "params"
+  parseJSON = withObject "ServerRequest" $ \o -> do
+    _srqRequestId <- o .: "id"
+    _srqMethod    <- o .: "method"
+    _srqParams    <- o .: "params"
+
+    return ServerRequest{..}
 
 -- server response
 instance ToJSON ServerResponse where
@@ -81,9 +83,11 @@ instance ToJSON ServerResponse where
     ]
 
 instance FromJSON ServerResponse where
-  parseJSON = withObject "ServerResonse" $ \v -> ServerResponse
-    <$>  v .: "id"
-    <*> (v .: "result" <|> pure [])
+  parseJSON = withObject "ServerResonse" $ \o -> do
+    _srpRequestId <- o .: "id"
+    _srpResult    <- o .: "result" <|> pure []
+
+    return ServerResponse{..}
 
 -- server error
 instance ToJSON ServerError where
@@ -93,17 +97,25 @@ instance ToJSON ServerError where
     ]
 
 instance FromJSON ServerError where
-  parseJSON = withObject "ServerError" $ \v -> ServerError
-    <$> v .: "code"
-    <*> v .: "msg"
+  parseJSON = withObject "ServerError" $ \o -> do
+    _sveCode    <- o .: "code"
+    _sveMessage <- o .: "msg"
+
+    return ServerError{..}
 
 -- ticker
 instance FromJSON Ticker where
-  parseJSON = withObject "Ticker" $ \o -> Ticker
-    <$> o .: "s" <*> o .: "E" <*> o .: "o"
-                 <*> o .: "c" <*> o .: "h"
-                 <*> o .: "l" <*> o .: "v"
-                 <*> o .: "q"
+  parseJSON = withObject "Ticker" $ \o -> do
+    _tckSymbolPair <- o .: "s"
+    _tckTs         <- o .: "E"
+    _tckOpen       <- read <$> o .: "o"
+    _tckClose      <- read <$> o .: "c"
+    _tckHigh       <- read <$> o .: "h"
+    _tckLow        <- read <$> o .: "l"
+    _tckVolume     <- read <$> o .: "v"
+    _tckTrades     <- read <$> o .: "q"
+
+    return Ticker{..}
 
 -- server message
 instance FromJSON ServerMsg where
