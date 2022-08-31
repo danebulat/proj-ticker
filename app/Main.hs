@@ -60,7 +60,7 @@ receiveWs conn = do
     forM_ msg $ \case
         MsgError    err -> print err
         MsgResponse res -> print res
-        MsgTicker   t   -> print t
+        MsgTicker   t   -> print $ fmtTickerRow t
 
 -- | Kill threads
 killThreads :: WS.Connection -> [ThreadId]-> IO ()
@@ -88,6 +88,7 @@ mkReqIO = do
   return $ ServerRequest rid "SUBSCRIBE" [T.strip (T.pack params)]
   where
     prompt p = putStrLn p
+
 
 -- -------------------------------------------------------------------
 -- Main

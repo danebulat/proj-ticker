@@ -1,11 +1,10 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DeriveGeneric #-}
 
 module WebTypes where 
 import Control.Applicative ((<|>))
-import Control.Lens.TH 
+import Control.Lens.TH
 import Data.Aeson
 import Data.Default
 import Data.Fixed (Pico)
@@ -39,7 +38,7 @@ data ServerError = ServerError
   } deriving (Eq, Show)
 
 data Ticker = Ticker
-  { _tckSymbolPair :: Text          -- "s", symbol,     "BTCUSDF"
+  { _tckSymbolPair :: Text          -- "s", symbol,     "BTCUSDT"
   , _tckTs         :: Integer       -- "E", event time,  123456789
   , _tckOpen       :: FixedFloat    -- "o", open price,  0.0010
   , _tckClose      :: FixedFloat    -- "c", close price, 0.0025
@@ -124,3 +123,23 @@ instance FromJSON ServerMsg where
     , MsgError    <$> parseJSON v
     , MsgTicker   <$> parseJSON v
     ]
+
+-- -------------------------------------------------------------------
+-- Make Lenses 
+
+makeLenses 'Ticker
+
+
+-- -------------------------------------------------------------------
+-- Defaults 
+
+instance Default Ticker where
+  def = Ticker { _tckSymbolPair = "BTCUSDT"
+               , _tckTs         = 1661971736489
+               , _tckOpen       = 0.0010
+               , _tckClose      = 0.0025
+               , _tckHigh       = 0.0045
+               , _tckLow        = 0.0005
+               , _tckVolume     = 10000
+               , _tckTrades     = 10
+               }
