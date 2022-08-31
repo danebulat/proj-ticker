@@ -3,11 +3,12 @@
 
 module Main where
 
-import Test.Hspec 
+import Test.Hspec
 import Data.Aeson (encode, decode)
+import Data.Maybe (fromJust)
 import qualified Data.ByteString.Lazy as B
-import WebTypes
 import Text.RawString.QQ
+import WebTypes
 
 -- -------------------------------------------------------------------
 -- Test Functions
@@ -36,6 +37,14 @@ testDecodeServerError = decode srvErrBs == Just srvErrSample
 testDecodeTicker :: Bool
 testDecodeTicker = decode tickerBs == Just tickerSample
 
+-- decoding a server message
+testDecodeSrvMsg :: Bool
+testDecodeSrvMsg =
+  let r1 = MsgResponse (fromJust $ decode srpBs')   == MsgResponse srpSample
+      r2 = MsgError    (fromJust $ decode srvErrBs) == MsgError srvErrSample
+      r3 = MsgTicker   (fromJust $ decode tickerBs) == MsgTicker tickerSample
+  in r1 && r2 && r3
+
 -- -------------------------------------------------------------------
 -- Sample Data
 
@@ -56,7 +65,7 @@ srpSample :: ServerResponse
 srpSample = ServerResponse { _srpRequestId = 1 , _srpResult = [] }
 
 -- encoded server response
-srpBs, srpBs' :: B.ByteString 
+srpBs, srpBs' :: B.ByteString
 srpBs  = [r|{"result":[],"id":1}|]
 srpBs' = [r|{"result":null,"id":1}|]
 
@@ -65,9 +74,9 @@ srvErrSample :: ServerError
 srvErrSample = ServerError 2 "invalid request."
 
 -- encoded server error 
-srvErrBs :: B.ByteString 
+srvErrBs :: B.ByteString
 srvErrBs = [r|{"code": 2, "msg": "invalid request."}|]
-  
+
 -- encoded ticker
 tickerBs :: B.ByteString
 tickerBs = [r|{"e": "24HrMiniTicker",
@@ -107,15 +116,18 @@ main = hspec $ do
       testEncodeSrq
 
   describe "JSON Decoding" $ do
-    it "ServerRequest bytestring decodes correctly" $ do
+    it "ServerRequest data decodes correctly" $ do
       testDecodeSrq
 
-    it "ServerResponse object decodes correctly" $ do
+    it "ServerResponse data decodes correctly" $ do
       testDecodeSrp
 
-    it "Server Error object decodes correctly" $ do
+    it "Server Error data decodes correctly" $ do
       testDecodeServerError
 
-    it "Ticker object decodes correctly" $ do
+    it "Ticker data decodes correctly" $ do
+      testDecodeTicker
+    
+    it "ServerMsg data decodes correctly" $ do
       testDecodeTicker
     

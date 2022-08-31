@@ -18,7 +18,7 @@ import GHC.Generics
 type FixedFloat = Pico 
 
 -- -------------------------------------------------------------------
--- Models 
+-- Models
 
 -- request 
 data ServerRequest = ServerRequest
@@ -48,6 +48,13 @@ data Ticker = Ticker
   , _tckVolume     :: FixedFloat    -- "v", total traded base asset volume, 10000
   , _tckTrades     :: FixedFloat    -- "q", total traded quote asset volume, 10
   } deriving (Eq, Show)
+
+data ServerMsg
+  = MsgResponse ServerResponse
+  | MsgError    ServerError
+  | MsgTicker   Ticker
+  deriving (Eq, Show)
+
 
 -- -------------------------------------------------------------------
 -- JSON Encoding and Decoding
@@ -97,3 +104,11 @@ instance FromJSON Ticker where
                  <*> o .: "c" <*> o .: "h"
                  <*> o .: "l" <*> o .: "v"
                  <*> o .: "q"
+
+-- server message
+instance FromJSON ServerMsg where
+  parseJSON v = asum
+    [ MsgResponse <$> parseJSON v
+    , MsgError    <$> parseJSON v
+    , MsgTicker   <$> parseJSON v
+    ]
