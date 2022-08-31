@@ -39,6 +39,7 @@ executable proj-ticker
                     , lens
                     , stm
                     , text
+                    , random
                     , raw-strings-qq
                     , websockets
                     , wuss
