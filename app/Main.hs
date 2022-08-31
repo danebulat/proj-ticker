@@ -14,8 +14,10 @@ import qualified System.Random as R
 import qualified Network.WebSockets as WS
 import Network.WebSockets (ClientApp, receiveData, sendClose, sendTextData, sendPing)
 import qualified Wuss 
-import WebTypes
 import Control.Exception (AsyncException(ThreadKilled))
+
+import WebTypes
+import Format
 
 data BinanceConn = BinanceConn
   { url  :: Text

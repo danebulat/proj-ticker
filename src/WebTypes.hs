@@ -40,7 +40,7 @@ data ServerError = ServerError
 
 data Ticker = Ticker
   { _tckSymbolPair :: Text          -- "s", symbol,     "BTCUSDF"
-  , _tckTs         :: Int           -- "E", event time,  123456789
+  , _tckTs         :: Integer       -- "E", event time,  123456789
   , _tckOpen       :: FixedFloat    -- "o", open price,  0.0010
   , _tckClose      :: FixedFloat    -- "c", close price, 0.0025
   , _tckHigh       :: FixedFloat    -- "h", high price,  0.0025

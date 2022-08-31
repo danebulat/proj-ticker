@@ -27,6 +27,7 @@ executable proj-ticker
     ghc-options:      -threaded
                       -fwarn-incomplete-patterns
     other-modules:    WebTypes
+                    , Format
     other-extensions:
     build-depends:    base ^>=4.14.3.0
                     , hspec
@@ -35,10 +36,12 @@ executable proj-ticker
                     , bytestring
                     , containers
                     , data-default
+                    , formatting
                     , http-client
                     , lens
                     , stm
                     , text
+                    , time
                     , random
                     , raw-strings-qq
                     , websockets
