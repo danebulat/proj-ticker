@@ -8,3 +8,4 @@ import WebTypes
 
 main :: IO ()
 main = putStrLn "Hello, Haskell!"
+
