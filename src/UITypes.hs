@@ -4,6 +4,7 @@
 module UITypes where 
 
 import Control.Concurrent (ThreadId)
+import Control.Concurrent.STM.TChan
 import Control.Lens.TH
 import Data.Default
 import qualified Network.WebSockets as WS
@@ -20,12 +21,14 @@ data AppState = AppState
   { _ticker    :: Ticker
   , _conn      :: Maybe WS.Connection
   , _threads   :: [ThreadId]
+  , _reqChan   :: Maybe (TChan ServerRequest)
   }
 
 instance Default AppState where
   def = AppState { _ticker    = def
                  , _threads   = []
-                 , _conn      = Nothing 
+                 , _conn      = Nothing
+                 , _reqChan   = Nothing
                  }
 
 data CustomEvent
@@ -37,3 +40,5 @@ data CustomEvent
   | QuitApp
 
 makeLenses 'AppState
+
+

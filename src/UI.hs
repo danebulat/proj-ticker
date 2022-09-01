@@ -4,7 +4,7 @@
 module UI where
 
 import Control.Concurrent (ThreadId)
-
+import Control.Concurrent.STM (newTChanIO)
 import Brick
 import Brick.Widgets.Table
 import Brick.Widgets.Center
@@ -33,7 +33,7 @@ handleEvent :: AppState -> BrickEvent () CustomEvent -> EventM () (Next AppState
 -- custom events
 handleEvent s (AppEvent (CacheConnection c)) =
   continue $ s & conn .~ Just c
-  
+
 handleEvent s (AppEvent (CacheThreadId t)) = do
   let ts = s ^. threads
   continue $ s & threads .~ (t : ts)
@@ -103,15 +103,20 @@ minusTickerAttr = "minusTicker"
 
 main :: IO ()
 main = do
+  requestChannel  <- newTChanIO
   eventChan <- Brick.BChan.newBChan 10
 
-  -- spawn threads here
-  connectBinance eventChan
+  -- default state
+  let s = def & reqChan .~ Just requestChannel
 
+  -- spawn threads here
+  connectBinance eventChan (fromJust $ s ^. reqChan)
+
+  -- run ui
   let buildVty = V.mkVty V.defaultConfig
   initialVty <- buildVty
   finalState <- customMain initialVty buildVty
-    (Just eventChan) brickApp def
+    (Just eventChan) brickApp s
 
   -- safely kill threads
   killThreads $ finalState ^. threads
@@ -120,3 +125,4 @@ main = do
   -- safely close connection
   WS.sendClose (fromJust $ finalState ^. conn) (pack "Bye!")
   print "> killed connection"
+

@@ -5,6 +5,8 @@ module Sockets where
 
 import Control.Monad (forever, void, forM_)
 import Control.Concurrent (forkIO, ThreadId, threadDelay, throwTo)
+import Control.Concurrent.STM.TChan
+import Control.Concurrent.STM (atomically)
 import Control.Exception (AsyncException(ThreadKilled))
 import Data.Aeson (encode, decode)
 import Data.Text (Text)
@@ -21,34 +23,40 @@ import UITypes
 -- Web Sockets
 
 -- | Connect to Binance WSS in a child thread
-connectBinance :: BC.BChan CustomEvent -> IO ()
-connectBinance chan = do
-  void . forkIO $ Wuss.runSecureClient url port path (wsApp chan)
+connectBinance :: BC.BChan CustomEvent -> TChan ServerRequest -> IO ()
+connectBinance eventChan reqChan = do
+  atomically $ writeTChan reqChan mkReq
+  void . forkIO $
+    Wuss.runSecureClient url port path (wsApp eventChan reqChan)
     where
     url  = "stream.binance.com"
     port = 9443
     path = "/ws"
 
--- | App within web socket connection context 
-wsApp ::  BC.BChan CustomEvent -> WS.ClientApp ()
-wsApp chan conn = do
-  --putStrLn "Connected!"
-  t1 <- receiveWs chan conn
-  sendWs conn
+-- | App within web socket connection context
+--
+-- NOTE: This thread must stay alive until app is closed to
+-- preserver the web socket connection.
+wsApp :: BC.BChan CustomEvent -> TChan ServerRequest -> WS.ClientApp ()
+wsApp eventChan reqChan conn = do
 
+  -- spawn thread to receive responses
+  t1 <- receiveWs eventChan conn
+  
   -- cache connection and thread ids in app state
-  BC.writeBChan chan (CacheConnection conn)
-  BC.writeBChan chan (CacheThreadId t1)
+  BC.writeBChan eventChan (CacheConnection conn)
+  BC.writeBChan eventChan (CacheThreadId t1)
 
-  -- NOTE: THIS THREAD NEEDS TO STAY OPEN
-  -- TODO: Implement channels
-  threadDelay (10 ^ 6 * 60 * 60) -- keep alive for an hour
+  -- continues in the current thread
+  sendWs conn reqChan
 
 -- | Send data to websocket
-sendWs :: WS.Connection -> IO ()
-sendWs conn = do
-  msg <- mkReq
-  WS.sendTextData conn (encode msg)
+sendWs :: WS.Connection -> TChan ServerRequest -> IO ()
+sendWs conn reqChan =
+  forever $ do
+    -- read server request from channel
+    msg <- atomically $ readTChan reqChan  
+    WS.sendTextData conn (encode msg)
 
 -- | Receive data from websocket
 receiveWs :: BC.BChan CustomEvent -> WS.Connection -> IO ThreadId
@@ -70,8 +78,8 @@ killThreads ts = do
 -- -------------------------------------------------------------------
 -- Makers 
 
-mkReq :: IO ServerRequest
-mkReq = return $ ServerRequest 1 "SUBSCRIBE" ["btcusdt@miniTicker"]
+mkReq :: ServerRequest
+mkReq = ServerRequest 1 "SUBSCRIBE" ["btcusdt@miniTicker"]
 
 mkReq' :: Int -> Text -> Text -> ServerRequest
 mkReq' reqId method params = ServerRequest
