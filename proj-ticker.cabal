@@ -28,6 +28,9 @@ executable proj-ticker
                       -fwarn-incomplete-patterns
     other-modules:    WebTypes
                     , Format
+                    , UI
+                    , UITypes
+                    , Sockets
                     , TableDemo
     other-extensions:
     build-depends:    base ^>=4.14.3.0
