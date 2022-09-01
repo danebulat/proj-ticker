@@ -8,17 +8,17 @@ import Control.Concurrent.STM (newTChanIO)
 import Brick
 import Brick.Widgets.Table
 import Brick.Widgets.Center
-import Brick.BChan
+import qualified Brick.BChan as BC
 import Data.Default
 import Data.Maybe (fromJust)
 import Control.Lens.TH
-import Control.Lens ((&), (^.), (.~))
+import Control.Lens ((&), (^.), (.~), (.=), (%=))
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.IO.Class (liftIO)
 import Data.Text (Text, pack)
+import Data.Map (Map)
 import qualified Network.WebSockets as WS
 import qualified Graphics.Vty as V
-import qualified Brick.BChan as Brick
 
 import Format
 import WebTypes
@@ -28,29 +28,39 @@ import Sockets
 -- -------------------------------------------------------------------
 -- Event Handler
 
-handleEvent :: AppState -> BrickEvent () CustomEvent -> EventM () (Next AppState)
+searchTicker :: Ticker -> [Ticker] -> Bool
+searchTicker t = foldr (\x acc ->
+    if acc then acc else x ^. tckSymbolPair == target) False
+  where target = t ^. tckSymbolPair
 
--- custom events
-handleEvent s (AppEvent (CacheConnection c)) =
-  continue $ s & conn .~ Just c
+rebuildTickers :: Ticker -> [Ticker] -> [Ticker]
+rebuildTickers t ts
+  | null ts = [t]
+  | searchTicker t ts = map (\x -> if x ^. tckSymbolPair == target then t else x) ts
+  | otherwise = t : ts
+  where
+    target = t ^. tckSymbolPair
 
-handleEvent s (AppEvent (CacheThreadId t)) = do
-  let ts = s ^. threads
-  continue $ s & threads .~ (t : ts)
+appEvent :: BrickEvent () CustomEvent -> EventM () AppState ()
+appEvent e =
+  case e of
+    AppEvent (CacheConnection c) -> conn .= Just c
 
-handleEvent s (AppEvent ErrorMessage)      = continue s
-handleEvent s (AppEvent ResponseMessage)   = continue s
-handleEvent s (AppEvent (TickerMessage t)) = do
-  -- update ticker
-  continue $ s & ticker .~ t
+    AppEvent (CacheThreadId t) -> do
+      threads %= \ts -> t : ts
 
--- start connection
-handleEvent s (VtyEvent (V.EvKey V.KEnter [])) = do continue s
+    AppEvent (TickerMessage t) -> do
+      tickers %= \ts -> rebuildTickers t ts
 
--- quit app
-handleEvent s (VtyEvent (V.EvKey (V.KChar 'q') [])) = halt s
-handleEvent s (VtyEvent (V.EvKey V.KEsc []))        = halt s
-handleEvent s _                                     = continue s
+    AppEvent ErrorMessage -> return ()
+    AppEvent ResponseMessage -> return ()
+
+    -- For later
+    VtyEvent (V.EvKey V.KEnter []) -> return ()
+
+    VtyEvent (V.EvKey V.KEsc []) -> halt
+    VtyEvent (V.EvKey (V.KChar 'q') []) -> halt
+    _ -> return ()
 
 -- -------------------------------------------------------------------
 -- UI
@@ -58,9 +68,9 @@ handleEvent s _                                     = continue s
 brickApp :: App AppState CustomEvent ()
 brickApp = App { appDraw         = drawUI
                , appChooseCursor = neverShowCursor
-               , appHandleEvent  = handleEvent
-               , appStartEvent   = return
-               , appAttrMap      = const theMap
+               , appHandleEvent  = appEvent
+               , appStartEvent   = return ()
+               , appAttrMap      = const $ attrMap V.defAttr []
                }
 
 -- draw UI
@@ -68,35 +78,33 @@ drawUI :: AppState -> [Widget ()]
 drawUI s = [ui s]
 
 ui :: AppState -> Widget ()
-ui s = center $ renderTable (mainTable s)
+ui s = if null (s ^. tickers)
+         then center $ txt "connecting..."
+         else center $ renderTable (drawTable $ s ^. tickers)
 
-mainTable :: AppState -> Table ()
-mainTable s = table [
-  [ txt $ t ^. tckSymbolPair
-  , txt $ "O: " <^> fmtPicoText 4 (t ^. tckOpen)
-  , txt $ "C: " <^> fmtPicoText 4 (t ^. tckClose)
-  , txt $ "H: " <^> fmtPicoText 4 (t ^. tckHigh)
-  , txt $ "L: " <^> fmtPicoText 4 (t ^. tckLow)
-  , txt $ "V: " <^> fmtPicoText 2 (t ^. tckVolume)
-  , txt $ "T: " <^> fmtPicoText 2 (t ^. tckTrades)
-  ] ]
+drawTable :: [Ticker] -> Table ()
+drawTable ts =
+  table $ drawRows ts
   where
-    t = s ^. ticker
+    drawRows [] = []
+    drawRows (t:ts) =
+       [ txt $ t ^. tckSymbolPair
+       , txt $ "O: " <^> fmtPicoText 4 (t ^. tckOpen)
+       , txt $ "C: " <^> fmtPicoText 4 (t ^. tckClose)
+       , txt $ "H: " <^> fmtPicoText 4 (t ^. tckHigh)
+       , txt $ "L: " <^> fmtPicoText 4 (t ^. tckLow)
+       , txt $ "V: " <^> fmtPicoText 2 (t ^. tckVolume)
+       , txt $ "T: " <^> fmtPicoText 2 (t ^. tckTrades)
+       ] : drawRows ts
 
 -- -------------------------------------------------------------------
 -- Attribute Map
 
 theMap :: AttrMap
 theMap = attrMap V.defAttr
-  [ (plusTickerAttr,  fg V.brightGreen)
-  , (minusTickerAttr, fg V.brightRed)
+  [ (attrName "plusTicker",  fg V.brightGreen)
+  , (attrName "minusTicker", fg V.brightRed)
   ]
-
-plusTickerAttr :: AttrName
-plusTickerAttr = "plusTicker"
-
-minusTickerAttr :: AttrName
-minusTickerAttr = "minusTicker"
 
 -- -------------------------------------------------------------------
 -- Main
@@ -104,7 +112,7 @@ minusTickerAttr = "minusTicker"
 main :: IO ()
 main = do
   requestChannel  <- newTChanIO
-  eventChan <- Brick.BChan.newBChan 10
+  eventChan <- BC.newBChan 10
 
   -- default state
   let s = def & reqChan .~ Just requestChannel

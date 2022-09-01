@@ -50,7 +50,7 @@ testDecodeSrvMsg =
 
 -- encoded server request
 srqBs :: B.ByteString
-srqBs = [r|{"params":["btcusdt@miniTicker"],"method":"SUBSCRIBE","id":1}|]
+srqBs = [r|{"id":1,"method":"SUBSCRIBE","params":["btcusdt@miniTicker"]}|]
 
 -- server request
 srqSample :: ServerRequest
@@ -79,15 +79,14 @@ srvErrBs = [r|{"code": 2, "msg": "invalid request."}|]
 
 -- encoded ticker
 tickerBs :: B.ByteString
-tickerBs = [r|{"e": "24HrMiniTicker",
+tickerBs = [r|{""s": "BTCUSDT",
 "E": 123456789,
-"s": "BTCUSDT",
-"c": 0.0025,
-"o": 0.0010,
-"h": 0.0025,
-"l": 0.0010,
-"v": 10000,
-"q": 18}|]
+"o": "0.0010",
+"c": "0.0025",
+"h": "0.0025",
+"l": "0.0010",
+"v": "10000",
+"q": "18"}|]
 
 -- ticker
 tickerSample :: Ticker

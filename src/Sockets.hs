@@ -6,7 +6,7 @@ module Sockets where
 import Control.Monad (forever, void, forM_)
 import Control.Concurrent (forkIO, ThreadId, threadDelay, throwTo)
 import Control.Concurrent.STM.TChan
-import Control.Concurrent.STM (atomically)
+import Control.Concurrent.STM (atomically, writeTChan)
 import Control.Exception (AsyncException(ThreadKilled))
 import Data.Aeson (encode, decode)
 import Data.Text (Text)
@@ -22,10 +22,27 @@ import UITypes
 -- -------------------------------------------------------------------
 -- Web Sockets
 
+-- | Initial symbol pairs to subscribe to
+initialSymbolPairs :: [Text]
+initialSymbolPairs = [ "btcusdt", "ethusdt", "adausdt" ]
+
+-- | Construct and Write ServerRequests to the request channel
+writeRequests :: [Text] -> TChan ServerRequest -> IO ()
+writeRequests symbols chan = forM_ symbols $ \symbol -> do
+  randId <- R.randomRIO (1,999)
+  req    <- mkReqIO randId method (params symbol)
+  atomically $ writeTChan chan req
+  where
+    method = "SUBSCRIBE"
+    params t = [t `T.append` "@miniTicker"]
+
 -- | Connect to Binance WSS in a child thread
 connectBinance :: BC.BChan CustomEvent -> TChan ServerRequest -> IO ()
 connectBinance eventChan reqChan = do
-  atomically $ writeTChan reqChan mkReq
+  -- write initial symbol requests
+  writeRequests initialSymbolPairs reqChan
+
+  -- spawn thread to handle wss connection
   void . forkIO $
     Wuss.runSecureClient url port path (wsApp eventChan reqChan)
     where
@@ -63,7 +80,6 @@ receiveWs :: BC.BChan CustomEvent -> WS.Connection -> IO ThreadId
 receiveWs chan conn = do
   forkIO . forever $ do
     bs <- WS.receiveData conn
-    
     let msg = decode bs
     forM_ msg $ \case
         MsgError    err -> BC.writeBChan chan ErrorMessage
@@ -81,14 +97,11 @@ killThreads ts = do
 mkReq :: ServerRequest
 mkReq = ServerRequest 1 "SUBSCRIBE" ["btcusdt@miniTicker"]
 
-mkReq' :: Int -> Text -> Text -> ServerRequest
-mkReq' reqId method params = ServerRequest
-  { _srqRequestId = reqId
-  , _srqMethod    = method
-  , _srqParams    = [params] }
+mkReqIO :: Int -> Text -> [Text] -> IO ServerRequest
+mkReqIO reqId method params = return $ ServerRequest reqId method params
 
-mkReqIO :: IO ServerRequest
-mkReqIO = do
+mkReqIO' :: IO ServerRequest
+mkReqIO' = do
   rid <- R.randomRIO (1, 999)
   prompt "> Enter params: "
   params <- getLine
