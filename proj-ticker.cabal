@@ -22,12 +22,13 @@ maintainer:         dane.bulat@gmail.com
 extra-source-files: CHANGELOG.md
 
 executable proj-ticker
-    hs-source-dirs:   app, src
+    hs-source-dirs:   app, src, src/tmp
     main-is:          Main.hs
     ghc-options:      -threaded
                       -fwarn-incomplete-patterns
     other-modules:    WebTypes
                     , Format
+                    , TableDemo
     other-extensions:
     build-depends:    base ^>=4.14.3.0
                     , hspec
@@ -42,10 +43,12 @@ executable proj-ticker
                     , stm
                     , text
                     , time
+                    , transformers
                     , random
                     , raw-strings-qq
                     , websockets
                     , wuss
+                    , vty
     default-language: Haskell2010
 
 test-suite proj-ticker-test
