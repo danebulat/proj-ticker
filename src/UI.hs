@@ -1,21 +1,32 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use ?~" #-}
 
 module UI where
 
 import Control.Concurrent (ThreadId)
 import Control.Concurrent.STM (newTChanIO)
+import Control.Concurrent.STM.TChan (TChan)
 import Brick
 import Brick.Widgets.Table
 import Brick.Widgets.Center
 import qualified Brick.BChan as BC
+import qualified Brick.Widgets.Center as C
+import qualified Brick.Widgets.Edit as E
+import qualified Brick.Focus as F
+import qualified Brick.Types as BT
+
 import Data.Default
 import Data.Maybe (fromJust)
 import Control.Lens.TH
 import Control.Lens ((&), (^.), (.~), (.=), (%=))
+import Lens.Micro.Mtl (use)
+
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.IO.Class (liftIO)
 import Data.Text (Text, pack)
+import qualified Data.Text as T
 import Data.Map (Map)
 import qualified Network.WebSockets as WS
 import qualified Graphics.Vty as V
@@ -41,9 +52,10 @@ rebuildTickers t ts
   where
     target = t ^. tckSymbolPair
 
-appEvent :: BrickEvent () CustomEvent -> EventM () AppState ()
+appEvent :: BrickEvent Name CustomEvent -> EventM Name AppState ()
 appEvent e =
   case e of
+    -- Custom app events
     AppEvent (CacheConnection c) -> conn .= Just c
 
     AppEvent (CacheThreadId t) -> do
@@ -55,37 +67,62 @@ appEvent e =
     AppEvent ErrorMessage -> return ()
     AppEvent ResponseMessage -> return ()
 
+    -- Tab keys (change focus)
+    VtyEvent (V.EvKey (V.KChar '\t') []) ->
+      focusRing %= F.focusNext
+
+    VtyEvent (V.EvKey V.KBackTab []) ->
+      focusRing %= F.focusPrev
+
     -- For later
     VtyEvent (V.EvKey V.KEnter []) -> return ()
 
+    -- Exit program
     VtyEvent (V.EvKey V.KEsc []) -> halt
     VtyEvent (V.EvKey (V.KChar 'q') []) -> halt
-    _ -> return ()
+
+    -- Handle editor widget
+    ev -> do
+      r <- use focusRing
+      case F.focusGetCurrent r of
+        Just Edit1 -> zoom edit1 $ E.handleEditorEvent ev
+        Nothing    -> return ()
 
 -- -------------------------------------------------------------------
 -- UI
 
-brickApp :: App AppState CustomEvent ()
+brickApp :: App AppState CustomEvent Name
 brickApp = App { appDraw         = drawUI
-               , appChooseCursor = neverShowCursor
+               , appChooseCursor = appCursor
                , appHandleEvent  = appEvent
                , appStartEvent   = return ()
                , appAttrMap      = const theMap
                }
 
 -- draw UI
-drawUI :: AppState -> [Widget ()]
+drawUI :: AppState -> [Widget Name]
 drawUI s = [ui s]
 
-ui :: AppState -> Widget ()
-ui s = if null (s ^. tickers)
+ui :: AppState -> Widget Name
+ui st = if null (st ^. tickers)
          then center $ txt "connecting..."
-         else center $ renderTable (drawTable $ s ^. tickers)
+         else vBox [ drawEditor st <=>
+                     drawTable st ]
 
-drawTable :: [Ticker] -> Table ()
-drawTable ts =
-  table $ drawRows ts
+-- edit box
+drawEditor :: AppState -> Widget Name
+drawEditor st = C.hCenter $ padTopBottom 4 $ txt "Symbol Pair: " <+> hLimit 20 (vLimit 1 e1)
   where
+    e1 = F.withFocusRing (st ^. focusRing)
+                         (E.renderEditor (txt . T.unlines))
+                         (st ^. edit1)
+
+-- ticker table
+drawTable :: AppState -> Widget Name
+drawTable st =
+  C.hCenter $ renderTable $ table $ drawRows ts
+  where
+    ts = st ^. tickers
     drawRows [] = []
     drawRows (t:ts) =
        [ txt $ t ^. tckSymbolPair
@@ -98,24 +135,44 @@ drawTable ts =
        ] : drawRows ts
 
 -- -------------------------------------------------------------------
+-- App Cursor 
+-- https://hackage.haskell.org/package/brick-1.1/docs/Brick-Focus.html#v:focusRingCursor
+
+appCursor :: AppState -> [BT.CursorLocation Name] -> Maybe (BT.CursorLocation Name)
+appCursor = F.focusRingCursor (^.focusRing)
+
+-- -------------------------------------------------------------------
 -- Attribute Map
 
 theMap :: AttrMap
 theMap = attrMap V.defAttr
   [ (attrName "plusTicker",  fg V.brightGreen)
   , (attrName "minusTicker", fg V.brightRed)
+  , (E.editAttr,        V.white `on` V.blue)
+  , (E.editFocusedAttr, V.white `on` V.blue)
   ]
 
 -- -------------------------------------------------------------------
 -- Main
 
+initialState :: TChan ServerRequest -> AppState
+initialState reqChan =
+  AppState
+  { _tickers   = []
+  , _conn      = Nothing
+  , _threads   = []
+  , _reqChan   = Just reqChan
+  , _focusRing = F.focusRing [Edit1]
+  , _edit1     = E.editor Edit1 (Just 1) ""
+  }
+
 main :: IO ()
 main = do
-  requestChannel  <- newTChanIO
+  requestChannel <- newTChanIO
   eventChan <- BC.newBChan 10
 
   -- default state
-  let s = def & reqChan .~ Just requestChannel
+  let s = initialState requestChannel
 
   -- spawn threads here
   connectBinance eventChan (fromJust $ s ^. reqChan)

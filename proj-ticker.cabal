@@ -39,6 +39,8 @@ library
                     , UITypes
                     , Sockets
                     , TableDemo
+                    , MouseDemo
+                    , EditDemo
     ghc-options:      -fwarn-incomplete-patterns
     build-depends:    base ^>=4.14.3.0
                     , brick == 1.1.*
@@ -59,6 +61,13 @@ library
                     , websockets
                     , wuss
                     , vty
+
+                    -- mouse demo
+                    , mtl
+                    , microlens >= 0.3.0.0
+                    , microlens-th
+                    , microlens-mtl
+                       
     default-language: Haskell2010
 
 test-suite proj-ticker-test

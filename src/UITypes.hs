@@ -9,6 +9,8 @@ import Control.Lens.TH
 import Data.Default
 import Data.Text (Text)
 import qualified Network.WebSockets as WS
+import qualified Brick.Widgets.Edit as E
+import qualified Brick.Focus as F
 import Data.Map (Map)
 import WebTypes
 
@@ -16,7 +18,7 @@ import WebTypes
 -- Types
 
 -- named resources 
-data Name = VP1 deriving (Ord, Show, Eq)
+data Name = Edit1 deriving (Ord, Show, Eq)
 
 -- app state
 data AppState = AppState
@@ -24,14 +26,11 @@ data AppState = AppState
   , _conn      :: Maybe WS.Connection
   , _threads   :: [ThreadId]
   , _reqChan   :: Maybe (TChan ServerRequest)
-  }
 
-instance Default AppState where
-  def = AppState { _tickers   = []
-                 , _threads   = []
-                 , _conn      = Nothing
-                 , _reqChan   = Nothing
-                 }
+    -- UI
+  , _focusRing :: F.FocusRing Name
+  , _edit1     :: E.Editor Text Name
+  }
 
 data CustomEvent
   = CacheThreadId ThreadId          -- ^ for closing threads safely when app closes 
