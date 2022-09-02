@@ -22,17 +22,24 @@ maintainer:         dane.bulat@gmail.com
 extra-source-files: CHANGELOG.md
 
 executable proj-ticker
-    hs-source-dirs:   app, src, src/tmp
+    hs-source-dirs:   app
     main-is:          Main.hs
     ghc-options:      -threaded
                       -fwarn-incomplete-patterns
-    exposed-modules:  WebTypes
+    build-depends:    base ^>=4.14.3.0
+                    , proj-ticker
+    other-extensions:
+    default-language: Haskell2010
+
+library
+    hs-source-dirs:   src, src/tmp
+    exposed-modules:  UI
+    other-modules:    WebTypes
                     , Format
-                    , UI
                     , UITypes
                     , Sockets
                     , TableDemo
-    other-extensions:
+    ghc-options:      -fwarn-incomplete-patterns
     build-depends:    base ^>=4.14.3.0
                     , brick == 1.1.*
                     , hspec
@@ -64,24 +71,21 @@ test-suite proj-ticker-test
                     , UITypes
     ghc-options:      -Wall -fwarn-tabs
     build-depends:    base ^>=4.14.3.0
+                    , proj-ticker
                     , brick == 1.1.*
-                    , hspec
-                    , QuickCheck
                     , aeson
                     , bytestring
-                    , containers
                     , data-default
                     , formatting
-                    , http-client
+                    , hspec
                     , lens
+                    , containers
+                    , QuickCheck
+                    , random
+                    , raw-strings-qq
                     , stm
                     , text
                     , time
-                    , transformers
-                    , random
-                    , raw-strings-qq
                     , websockets
                     , wuss
-                    , vty
-
     default-language: Haskell2010

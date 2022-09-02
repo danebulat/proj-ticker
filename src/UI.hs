@@ -70,7 +70,7 @@ brickApp = App { appDraw         = drawUI
                , appChooseCursor = neverShowCursor
                , appHandleEvent  = appEvent
                , appStartEvent   = return ()
-               , appAttrMap      = const $ attrMap V.defAttr []
+               , appAttrMap      = const theMap
                }
 
 -- draw UI
