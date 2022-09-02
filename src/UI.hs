@@ -12,6 +12,7 @@ import Brick
 import Brick.Widgets.Table
 import Brick.Widgets.Center
 import qualified Brick.BChan as BC
+import qualified Brick.Widgets.Border as B
 import qualified Brick.Widgets.Center as C
 import qualified Brick.Widgets.Edit as E
 import qualified Brick.Focus as F
@@ -87,6 +88,7 @@ appEvent e =
       case F.focusGetCurrent r of
         Just Edit1 -> zoom edit1 $ E.handleEditorEvent ev
         Nothing    -> return ()
+        _          -> return ()
 
 -- -------------------------------------------------------------------
 -- UI
@@ -106,16 +108,33 @@ drawUI s = [ui s]
 ui :: AppState -> Widget Name
 ui st = if null (st ^. tickers)
          then center $ txt "connecting..."
-         else vBox [ drawEditor st <=>
-                     drawTable st ]
+         else vBox [ C.hCenter ( padTop (Pad 4)
+                               $ padBottom (Pad 2)
+                               $ drawEditor st
+                             <+> drawButtons)
+                 <=> drawTable st ]
 
 -- edit box
 drawEditor :: AppState -> Widget Name
-drawEditor st = C.hCenter $ padTopBottom 4 $ txt "Symbol Pair: " <+> hLimit 20 (vLimit 1 e1)
+drawEditor st = txt "Symbol Pair: " <+> hLimit 20 (vLimit 1 e1)
   where
     e1 = F.withFocusRing (st ^. focusRing)
                          (E.renderEditor (txt . T.unlines))
                          (st ^. edit1)
+
+-- buttons
+drawButtons :: Widget Name
+drawButtons = hBox $ padLeftRight 1 <$> buttons
+  where buttons = mkButton <$> buttonData
+        buttonData = [ ("F2 ", "Add",    attrName "addButton")
+                     , ("F3 ", "Remove", attrName "removeButton")
+                     ]
+        -- pass Name value to make button clickable
+        mkButton (key, label, attr) =
+          txt key <+>
+          withDefAttr attr (padLeftRight 1 $ txt label)
+          --  $ B.border
+          --  $ padTopBottom 1
 
 -- ticker table
 drawTable :: AppState -> Widget Name
@@ -146,10 +165,12 @@ appCursor = F.focusRingCursor (^.focusRing)
 
 theMap :: AttrMap
 theMap = attrMap V.defAttr
-  [ (attrName "plusTicker",  fg V.brightGreen)
-  , (attrName "minusTicker", fg V.brightRed)
-  , (E.editAttr,        V.white `on` V.blue)
-  , (E.editFocusedAttr, V.white `on` V.blue)
+  [ (attrName "plusTicker",   fg V.brightGreen)
+  , (attrName "minusTicker",  fg V.brightRed)
+  , (attrName "addButton",    V.black `on` V.cyan)
+  , (attrName "removeButton", V.black `on` V.cyan)
+  , (E.editAttr,              V.white `on` V.blue)
+  , (E.editFocusedAttr,       V.white `on` V.blue)
   ]
 
 -- -------------------------------------------------------------------
