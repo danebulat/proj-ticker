@@ -112,7 +112,8 @@ ui st = if null (st ^. tickers)
                                $ padBottom (Pad 2)
                                $ drawEditor st
                              <+> drawButtons)
-                 <=> drawTable st ]
+                 <=> drawTable st
+                 <=> drawInfoLayer st]
 
 -- edit box
 drawEditor :: AppState -> Widget Name
@@ -153,6 +154,17 @@ drawTable st =
        , txt $ "T: " <^> fmtPicoText 2 (t ^. tckTrades)
        ] : drawRows ts
 
+-- draw status "info" bar
+drawInfoLayer :: AppState -> Widget Name
+drawInfoLayer st = Widget Fixed Fixed $ do
+  c <- getContext
+  let h = c ^. availHeightL
+      msg = "status line text"
+  render $ translateBy (Location (0, h-1))
+         $ withDefAttr (attrName "info")
+         $ C.hCenter
+         $ txt msg
+  
 -- -------------------------------------------------------------------
 -- App Cursor 
 -- https://hackage.haskell.org/package/brick-1.1/docs/Brick-Focus.html#v:focusRingCursor
@@ -169,6 +181,7 @@ theMap = attrMap V.defAttr
   , (attrName "minusTicker",  fg V.brightRed)
   , (attrName "addButton",    V.black `on` V.cyan)
   , (attrName "removeButton", V.black `on` V.cyan)
+  , (attrName "info",         V.white `on` V.color240 64 0 128)
   , (E.editAttr,              V.white `on` V.blue)
   , (E.editFocusedAttr,       V.white `on` V.blue)
   ]
