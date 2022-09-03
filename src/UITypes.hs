@@ -28,8 +28,10 @@ data AppState = AppState
   , _reqChan   :: Maybe (TChan ServerRequest)
 
     -- UI
-  , _focusRing :: F.FocusRing Name
-  , _edit1     :: E.Editor Text Name
+  , _focusRing     :: F.FocusRing Name
+  , _edit1         :: E.Editor Text Name
+  , _statusText    :: Text
+  , _processingReq :: Bool 
   }
 
 data CustomEvent

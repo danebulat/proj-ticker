@@ -40,6 +40,18 @@ import Sockets
 -- -------------------------------------------------------------------
 -- Event Handler
 
+validateSymbol :: Text -> Bool
+validateSymbol ts = isAlpha && noSpaces && goodLength
+  where validChars = ['A'..'Z'] ++ ['a'..'z']
+        isAlpha = foldr (\x acc ->
+          if not acc then acc else x `elem` validChars) True (T.unpack ts)
+        noSpaces = ' ' `notElem` T.unpack ts
+        goodLength = T.length ts > 4
+
+searchTickerSymbol :: Text -> [Ticker] -> Bool
+searchTickerSymbol t =
+  foldr (\x acc -> if acc then acc else T.toUpper t == x ^. tckSymbolPair) False
+
 searchTicker :: Ticker -> [Ticker] -> Bool
 searchTicker t = foldr (\x acc ->
     if acc then acc else x ^. tckSymbolPair == target) False
@@ -65,8 +77,11 @@ appEvent e =
     AppEvent (TickerMessage t) -> do
       tickers %= \ts -> rebuildTickers t ts
 
-    AppEvent ErrorMessage -> return ()
-    AppEvent ResponseMessage -> return ()
+    AppEvent ErrorMessage -> do
+      processingReq .= False
+    
+    AppEvent ResponseMessage -> do
+      processingReq .= False
 
     -- Tab keys (change focus)
     VtyEvent (V.EvKey (V.KChar '\t') []) ->
@@ -74,6 +89,35 @@ appEvent e =
 
     VtyEvent (V.EvKey V.KBackTab []) ->
       focusRing %= F.focusPrev
+
+    -- F2
+    VtyEvent (V.EvKey (V.KFun 2) []) -> do
+      statusText .= "F2 pressed!"
+
+     -- Get editor text and tickers 
+      e1 <- use edit1
+      ts <- use tickers
+      let contents = E.getEditContents e1
+
+      -- Check if contents is an existing ticker
+      if searchTickerSymbol (head contents) ts
+        then statusText .= head contents `T.append` " - already added!"
+        else do
+          -- Validate symbol
+          if validateSymbol (head contents)
+            -- Write request
+            then do processingReq .= True
+                    statusText .= head contents `T.append` " - requested!"
+                    -- TODO: Write request
+            else statusText .= head contents
+                   `T.append` " - validation failed! Enter a valid symbol."
+
+    -- F3
+    VtyEvent (V.EvKey (V.KFun 3) []) -> do
+      -- TODO: Get editor text
+      -- TODO: Check if text is an existing ticker  (necessary to remove)
+      statusText .= "F3 pressed!"
+      processingReq .= True
 
     -- For later
     VtyEvent (V.EvKey V.KEnter []) -> return ()
@@ -111,7 +155,7 @@ ui st = if null (st ^. tickers)
          else vBox [ C.hCenter ( padTop (Pad 4)
                                $ padBottom (Pad 2)
                                $ drawEditor st
-                             <+> drawButtons)
+                             <+> drawButtons st)
                  <=> drawTable st
                  <=> drawInfoLayer st]
 
@@ -124,12 +168,15 @@ drawEditor st = txt "Symbol Pair: " <+> hLimit 20 (vLimit 1 e1)
                          (st ^. edit1)
 
 -- buttons
-drawButtons :: Widget Name
-drawButtons = hBox $ padLeftRight 1 <$> buttons
+drawButtons :: AppState -> Widget Name
+drawButtons st = hBox $ padLeftRight 1 <$> buttons
   where buttons = mkButton <$> buttonData
-        buttonData = [ ("F2 ", "Add",    attrName "addButton")
-                     , ("F3 ", "Remove", attrName "removeButton")
+        buttonData = [ ("F2 ", "Add",    attrName buttonAttr)
+                     , ("F3 ", "Remove", attrName buttonAttr)
                      ]
+        buttonAttr = if st^.processingReq
+                       then "buttonDisable"
+                       else "buttonEnable"
         -- pass Name value to make button clickable
         mkButton (key, label, attr) =
           txt key <+>
@@ -159,7 +206,7 @@ drawInfoLayer :: AppState -> Widget Name
 drawInfoLayer st = Widget Fixed Fixed $ do
   c <- getContext
   let h = c ^. availHeightL
-      msg = "status line text"
+      msg = st ^. statusText
   render $ translateBy (Location (0, h-1))
          $ withDefAttr (attrName "info")
          $ C.hCenter
@@ -177,13 +224,13 @@ appCursor = F.focusRingCursor (^.focusRing)
 
 theMap :: AttrMap
 theMap = attrMap V.defAttr
-  [ (attrName "plusTicker",   fg V.brightGreen)
-  , (attrName "minusTicker",  fg V.brightRed)
-  , (attrName "addButton",    V.black `on` V.cyan)
-  , (attrName "removeButton", V.black `on` V.cyan)
-  , (attrName "info",         V.white `on` V.color240 64 0 128)
-  , (E.editAttr,              V.white `on` V.blue)
-  , (E.editFocusedAttr,       V.white `on` V.blue)
+  [ (attrName "plusTicker",    fg V.brightGreen)
+  , (attrName "minusTicker",   fg V.brightRed)
+  , (attrName "buttonEnable",  V.black `on` V.cyan)
+  , (attrName "buttonDisable", V.black `on` V.color240 77 77 77)
+  , (attrName "info",          V.white `on` V.color240 64 0 128)
+  , (E.editAttr,               V.white `on` V.blue)
+  , (E.editFocusedAttr,        V.white `on` V.blue)
   ]
 
 -- -------------------------------------------------------------------
@@ -192,12 +239,14 @@ theMap = attrMap V.defAttr
 initialState :: TChan ServerRequest -> AppState
 initialState reqChan =
   AppState
-  { _tickers   = []
-  , _conn      = Nothing
-  , _threads   = []
-  , _reqChan   = Just reqChan
-  , _focusRing = F.focusRing [Edit1]
-  , _edit1     = E.editor Edit1 (Just 1) ""
+  { _tickers       = []
+  , _conn          = Nothing
+  , _threads       = []
+  , _reqChan       = Just reqChan
+  , _focusRing     = F.focusRing [Edit1]
+  , _edit1         = E.editor Edit1 (Just 1) ""
+  , _statusText    = "F2/F3 to add/remove symbol pair"
+  , _processingReq = False
   }
 
 main :: IO ()
