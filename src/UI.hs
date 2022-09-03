@@ -40,6 +40,11 @@ import Sockets
 -- -------------------------------------------------------------------
 -- Event Handler
 
+removeTickerWithSymbol :: Text -> [Ticker] -> [Ticker]
+removeTickerWithSymbol x = filter (\t -> (t^.tckSymbolPair) /= symUpper)
+  where symUpper = T.toUpper x 
+  
+
 validateSymbol :: Text -> Bool
 validateSymbol ts = isAlpha && noSpaces && goodLength
   where validChars = ['A'..'Z'] ++ ['a'..'z']
@@ -94,34 +99,47 @@ appEvent e =
 
     -- F2
     VtyEvent (V.EvKey (V.KFun 2) []) -> do
-     -- Get editor text and tickers 
-      e1 <- use edit1
-      ts <- use tickers
-      let contents = E.getEditContents e1
-
-      -- Check if contents is an existing ticker
-      if searchTickerSymbol (head contents) ts
-        then statusText .= head contents `T.append` " - already added!"
+      pr <- use processingReq
+      if pr
+        then statusText .= "error - a request is already being handled"
         else do
-          -- Validate symbol
-          if validateSymbol (head contents)
-            then do processingReq .= True
-                    -- Write request
-                    chan <- use reqChan
-                    liftIO $ Sockets.writeRequests contents "SUBSCRIBE" (fromJust chan)
-                    statusText .= head contents `T.append` " - request made!"
-            else statusText .= head contents
-                   `T.append` " - validation failed! Enter a valid symbol."
+          e1 <- use edit1
+          ts <- use tickers
+          let contents = E.getEditContents e1
+
+          -- check if contents is an existing ticker
+          if searchTickerSymbol (head contents) ts
+            then statusText .= head contents `T.append` " - already added!"
+            else do
+              -- validate symbol
+              if validateSymbol (head contents)
+                then do processingReq .= True
+                        -- write request
+                        chan <- use reqChan
+                        liftIO $ Sockets.writeRequests contents "SUBSCRIBE" (fromJust chan)
+                        statusText .= head contents `T.append` " request sent"
+                else statusText .= head contents
+                       `T.append` " - validation failed! Enter a valid symbol."
 
     -- F3
     VtyEvent (V.EvKey (V.KFun 3) []) -> do
-      -- TODO: Get editor text
-      -- TODO: Check if text is an existing ticker  (necessary to remove)
-      statusText .= "F3 pressed!"
-      processingReq .= True
+      pr <- use processingReq
+      if pr 
+        then statusText .= "error - a request is already being handled"
+        else do
+          e1 <- use edit1
+          ts <- use tickers
+          let contents = E.getEditContents e1
 
-    -- For later
-    VtyEvent (V.EvKey V.KEnter []) -> return ()
+          -- check if text is an existing ticker
+          if searchTickerSymbol (head contents) ts
+            then do processingReq .= True
+                    let symbolLower = T.toLower (head contents)
+                    chan <- use reqChan
+                    liftIO $ Sockets.writeRequests [symbolLower] "UNSUBSCRIBE" (fromJust chan)
+                    tickers %= removeTickerWithSymbol (head contents)
+                    statusText .= head contents `T.append` "removed"
+            else statusText .= head contents `T.append` " - not in current ticker list"
 
     -- Exit program
     VtyEvent (V.EvKey V.KEsc []) -> halt
