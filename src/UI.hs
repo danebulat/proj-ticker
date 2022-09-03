@@ -42,8 +42,8 @@ import Sockets
 
 removeTickerWithSymbol :: Text -> [Ticker] -> [Ticker]
 removeTickerWithSymbol x = filter (\t -> (t^.tckSymbolPair) /= symUpper)
-  where symUpper = T.toUpper x 
-  
+  where symUpper = T.toUpper x
+
 
 validateSymbol :: Text -> Bool
 validateSymbol ts = isAlpha && noSpaces && goodLength
@@ -85,7 +85,7 @@ appEvent e =
     AppEvent (ErrorMessage err) -> do
       processingReq .= False
       statusText .= (T.pack . show $ err)
-    
+
     AppEvent (ResponseMessage res) -> do
       processingReq .= False
       statusText .= (T.pack . show $ res)
@@ -124,7 +124,7 @@ appEvent e =
     -- F3
     VtyEvent (V.EvKey (V.KFun 3) []) -> do
       pr <- use processingReq
-      if pr 
+      if pr
         then statusText .= "error - a request is already being handled"
         else do
           e1 <- use edit1
@@ -171,12 +171,44 @@ drawUI s = [ui s]
 ui :: AppState -> Widget Name
 ui st = if null (st ^. tickers)
          then center $ txt "connecting..."
-         else vBox [ C.hCenter ( padTop (Pad 4)
-                               $ padBottom (Pad 2)
-                               $ drawEditor st
-                             <+> drawButtons st)
-                 <=> drawTable st
-                 <=> drawInfoLayer st]
+         else
+           vBox [hBox [ vBox [ C.hCenterLayer ( padTop (Pad 4)
+                $ padBottom (Pad 2)
+                $ drawEditor st
+              <+> drawButtons st)
+            ] ]
+            , padLeftRight 2 (drawTable st)
+            , drawInfoLayer st
+            ]
+
+-- draw responsive table
+drawTable :: AppState -> Widget Name
+drawTable st =
+    vBox [ B.hBorder
+         , mkHeaders
+         , B.hBorder ] <=> drawRows ts
+
+  where headers   = ["Symbols", "Open", "Close", "High", "Low", "Volume", "Traded"]
+        cols      = map (padRight Max . txt) headers
+        mkHeaders = hBox cols
+        ts        = st ^. tickers
+
+-- draw table rows
+drawRows :: [Ticker] -> Widget Name
+drawRows = foldr (\x acc ->
+    let cs  = colText x
+        cs' = map (padRight Max . txt) cs
+    in acc <=> vBox [ hBox cs', B.hBorder ]) emptyHBox
+  where
+    emptyHBox = hBox []
+    colText t = [ t^.tckSymbolPair
+                , fmtPicoText 4 (t^.tckOpen)
+                , fmtPicoText 4 (t^.tckClose)
+                , fmtPicoText 4 (t^.tckHigh)
+                , fmtPicoText 4 (t^.tckLow)
+                , fmtPicoText 2 (t^.tckVolume)
+                , fmtPicoText 2 (t^.tckTrades)
+                ]
 
 -- edit box
 drawEditor :: AppState -> Widget Name
@@ -203,23 +235,6 @@ drawButtons st = hBox $ padLeftRight 1 <$> buttons
           --  $ B.border
           --  $ padTopBottom 1
 
--- ticker table
-drawTable :: AppState -> Widget Name
-drawTable st =
-  C.hCenter $ renderTable $ table $ drawRows ts
-  where
-    ts = st ^. tickers
-    drawRows [] = []
-    drawRows (t:ts) =
-       [ txt $ t ^. tckSymbolPair
-       , txt $ "O: " <^> fmtPicoText 4 (t ^. tckOpen)
-       , txt $ "C: " <^> fmtPicoText 4 (t ^. tckClose)
-       , txt $ "H: " <^> fmtPicoText 4 (t ^. tckHigh)
-       , txt $ "L: " <^> fmtPicoText 4 (t ^. tckLow)
-       , txt $ "V: " <^> fmtPicoText 2 (t ^. tckVolume)
-       , txt $ "T: " <^> fmtPicoText 2 (t ^. tckTrades)
-       ] : drawRows ts
-
 -- draw status "info" bar
 drawInfoLayer :: AppState -> Widget Name
 drawInfoLayer st = Widget Fixed Fixed $ do
@@ -230,7 +245,13 @@ drawInfoLayer st = Widget Fixed Fixed $ do
          $ withDefAttr (attrName "info")
          $ C.hCenter
          $ txt msg
-  
+
+drawInfoLayer' :: AppState -> Widget Name
+drawInfoLayer' st = withDefAttr (attrName "info")
+                  $ hBox [ C.hCenter $ vLimit 1 $ txt msg ]
+  where msg = st ^. statusText
+
+
 -- -------------------------------------------------------------------
 -- App Cursor 
 -- https://hackage.haskell.org/package/brick-1.1/docs/Brick-Focus.html#v:focusRingCursor
