@@ -27,20 +27,19 @@ initialSymbolPairs :: [Text]
 initialSymbolPairs = [ "btcusdt", "ethusdt", "adausdt" ]
 
 -- | Construct and Write ServerRequests to the request channel
-writeRequests :: [Text] -> TChan ServerRequest -> IO ()
-writeRequests symbols chan = forM_ symbols $ \symbol -> do
+writeRequests :: [Text] -> Text -> TChan ServerRequest -> IO ()
+writeRequests symbols method chan = forM_ symbols $ \symbol -> do
   randId <- R.randomRIO (1,999)
   req    <- mkReqIO randId method (params symbol)
   atomically $ writeTChan chan req
   where
-    method = "SUBSCRIBE"
     params t = [t `T.append` "@miniTicker"]
 
 -- | Connect to Binance WSS in a child thread
 connectBinance :: BC.BChan CustomEvent -> TChan ServerRequest -> IO ()
 connectBinance eventChan reqChan = do
   -- write initial symbol requests
-  writeRequests initialSymbolPairs reqChan
+  writeRequests initialSymbolPairs "SUBSCRIBE" reqChan
 
   -- spawn thread to handle wss connection
   void . forkIO $
@@ -82,8 +81,8 @@ receiveWs chan conn = do
     bs <- WS.receiveData conn
     let msg = decode bs
     forM_ msg $ \case
-        MsgError    err -> BC.writeBChan chan ErrorMessage
-        MsgResponse res -> BC.writeBChan chan ResponseMessage
+        MsgError    err -> BC.writeBChan chan (ErrorMessage err)
+        MsgResponse res -> BC.writeBChan chan (ResponseMessage res)
         MsgTicker   t   -> BC.writeBChan chan (TickerMessage t)
 
 -- | Kill threads

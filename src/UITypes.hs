@@ -37,8 +37,8 @@ data AppState = AppState
 data CustomEvent
   = CacheThreadId ThreadId          -- ^ for closing threads safely when app closes 
   | CacheConnection WS.Connection   -- ^ for closing connection safely when app closes 
-  | ErrorMessage
-  | ResponseMessage
+  | ErrorMessage ServerError
+  | ResponseMessage ServerResponse
   | TickerMessage Ticker
   | QuitApp
 

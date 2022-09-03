@@ -77,11 +77,13 @@ appEvent e =
     AppEvent (TickerMessage t) -> do
       tickers %= \ts -> rebuildTickers t ts
 
-    AppEvent ErrorMessage -> do
+    AppEvent (ErrorMessage err) -> do
       processingReq .= False
+      statusText .= (T.pack . show $ err)
     
-    AppEvent ResponseMessage -> do
+    AppEvent (ResponseMessage res) -> do
       processingReq .= False
+      statusText .= (T.pack . show $ res)
 
     -- Tab keys (change focus)
     VtyEvent (V.EvKey (V.KChar '\t') []) ->
@@ -92,8 +94,6 @@ appEvent e =
 
     -- F2
     VtyEvent (V.EvKey (V.KFun 2) []) -> do
-      statusText .= "F2 pressed!"
-
      -- Get editor text and tickers 
       e1 <- use edit1
       ts <- use tickers
@@ -105,10 +105,11 @@ appEvent e =
         else do
           -- Validate symbol
           if validateSymbol (head contents)
-            -- Write request
             then do processingReq .= True
-                    statusText .= head contents `T.append` " - requested!"
-                    -- TODO: Write request
+                    -- Write request
+                    chan <- use reqChan
+                    liftIO $ Sockets.writeRequests contents "SUBSCRIBE" (fromJust chan)
+                    statusText .= head contents `T.append` " - request made!"
             else statusText .= head contents
                    `T.append` " - validation failed! Enter a valid symbol."
 
