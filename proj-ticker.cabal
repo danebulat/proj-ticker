@@ -54,6 +54,7 @@ library
                     , lens
                     , stm
                     , text
+                    , text-zipper
                     , time
                     , transformers
                     , random
@@ -94,6 +95,7 @@ test-suite proj-ticker-test
                     , raw-strings-qq
                     , stm
                     , text
+                    , text-zipper
                     , time
                     , websockets
                     , wuss

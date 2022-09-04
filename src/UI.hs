@@ -29,6 +29,7 @@ import Control.Monad.Trans.Class (lift)
 import Control.Monad.IO.Class (liftIO)
 import Data.Text (Text, pack)
 import qualified Data.Text as T
+import Data.Text.Zipper (clearZipper)
 import Data.Map (Map)
 import qualified Network.WebSockets as WS
 import qualified Graphics.Vty as V
@@ -126,6 +127,7 @@ appEvent e =
                         -- write request
                         chan <- use reqChan
                         liftIO $ Sockets.writeRequests contents "SUBSCRIBE" (fromJust chan)
+                        edit1 %= E.applyEdit clearZipper
                         statusText .= head contents `T.append` " request sent"
                 else statusText .= head contents
                        `T.append` " - validation failed! Enter a valid symbol."
@@ -150,6 +152,7 @@ appEvent e =
                         chan <- use reqChan
                         liftIO $ Sockets.writeRequests [symbolLower] "UNSUBSCRIBE" (fromJust chan)
                         tickers %= removeTickerWithSymbol (head contents)
+                        edit1 %= E.applyEdit clearZipper
                         statusText .= head contents `T.append` "removed"
                 else statusText .= head contents `T.append` " - not in current ticker list"
 
