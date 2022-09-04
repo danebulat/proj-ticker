@@ -42,6 +42,9 @@ import Graphics.Vty (withStyle)
 -- -------------------------------------------------------------------
 -- Event Handler
 
+vp1Scroll :: ViewportScroll Name
+vp1Scroll = viewportScroll VP1
+
 sortTickerAlpha :: [Ticker] -> [Ticker]
 sortTickerAlpha = sortBy (\t1 t2 ->
   compare (t2^.tckSymbolPair) (t1^.tckSymbolPair))
@@ -49,7 +52,6 @@ sortTickerAlpha = sortBy (\t1 t2 ->
 removeTickerWithSymbol :: Text -> [Ticker] -> [Ticker]
 removeTickerWithSymbol x = filter (\t -> (t^.tckSymbolPair) /= symUpper)
   where symUpper = T.toUpper x
-
 
 validateSymbol :: Text -> Bool
 validateSymbol ts = isAlpha && noSpaces && goodLength
@@ -151,6 +153,11 @@ appEvent e =
                         statusText .= head contents `T.append` "removed"
                 else statusText .= head contents `T.append` " - not in current ticker list"
 
+    -- Scroll viewport
+    VtyEvent (V.EvKey (V.KFun 4) []) -> vScrollBy vp1Scroll 1
+
+    VtyEvent (V.EvKey (V.KFun 5) []) -> vScrollBy vp1Scroll (-1)
+
     -- Exit program
     VtyEvent (V.EvKey V.KEsc []) -> halt
     VtyEvent (V.EvKey (V.KChar 'q') []) -> halt
@@ -182,18 +189,19 @@ ui :: AppState -> Widget Name
 ui st = if null (st ^. tickers)
          then center $ txt "connecting..."
          else
-           vBox [hBox [ vBox [ C.hCenterLayer ( padTop (Pad 4)
+           vBox [ hBox [ vBox [ C.hCenterLayer (padTop (Pad 2)
                 $ padBottom (Pad 2)
                 $ drawEditor st
               <+> drawButtons st)
             ] ]
-            , padLeftRight 2 (drawTable st)
+            -- vertical limit set to 80% of terminal height
+            , vLimitPercent 80 $ viewport VP1 Vertical $ vBox [ padLeftRight 2 (drawTable st) ]
             , drawInfoLayer st
             ]
 
 -- draw responsive table
 drawTable :: AppState -> Widget Name
-drawTable st =
+drawTable st = 
     vBox [ B.hBorder
          , mkHeaders
          , B.hBorder ] <=> drawRows ts
@@ -244,10 +252,11 @@ drawEditor st = txt "Symbol Pair: " <+> hLimit 20 (vLimit 1 e1)
 
 -- buttons
 drawButtons :: AppState -> Widget Name
-drawButtons st = hBox $ padLeftRight 1 <$> buttons
+drawButtons st = padLeft (Pad 1) $ hBox $ padRight (Pad 1) <$> buttons
   where buttons = mkButton <$> buttonData
-        buttonData = [ ("F2 ", "Add",    attrName buttonAttr)
-                     , ("F3 ", "Remove", attrName buttonAttr)
+        buttonData = [ ("F2 ",    "Add",    attrName buttonAttr)
+                     , ("F3 ",    "Remove", attrName buttonAttr)
+                     , ("F4|F5 ", "Scroll", attrName buttonAttr)
                      ]
         buttonAttr = if st^.processingReq
                        then "buttonDisable"
@@ -256,8 +265,6 @@ drawButtons st = hBox $ padLeftRight 1 <$> buttons
         mkButton (key, label, attr) =
           txt key <+>
           withDefAttr attr (padLeftRight 1 $ txt label)
-          --  $ B.border
-          --  $ padTopBottom 1
 
 -- draw status "info" bar
 drawInfoLayer :: AppState -> Widget Name

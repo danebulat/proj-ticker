@@ -18,7 +18,7 @@ import WebTypes
 -- Types
 
 -- named resources 
-data Name = Edit1 | AddBtn | RemoveBtn deriving (Ord, Show, Eq)
+data Name = Edit1 | VP1 | AddBtn | RemoveBtn  deriving (Ord, Show, Eq)
 
 -- app state
 data AppState = AppState

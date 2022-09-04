@@ -24,7 +24,7 @@ import UITypes
 
 -- | Initial symbol pairs to subscribe to
 initialSymbolPairs :: [Text]
-initialSymbolPairs = [ "btcusdt", "ethusdt", "adausdt" ]
+initialSymbolPairs = [ "btcusdt", "ethusdt", "adausdt"]
 
 -- | Construct and Write ServerRequests to the request channel
 writeRequests :: [Text] -> Text -> TChan ServerRequest -> IO ()
