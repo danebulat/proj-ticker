@@ -38,7 +38,6 @@ import Format
 import WebTypes
 import UITypes
 import Sockets
-import Graphics.Vty (withStyle)
 
 -- -------------------------------------------------------------------
 -- Functions called in event handlers
@@ -352,7 +351,7 @@ theMap = attrMap V.defAttr
   , (attrName "buttonEnable",  V.black `on` V.cyan)
   , (attrName "buttonDisable", V.black `on` V.color240 77 77 77)
   , (attrName "info",          V.white `on` V.color240 64 0 128)
-  , (attrName "tableHeader",   fg (V.color240 166 166 166)  `withStyle` V.bold)
+  , (attrName "tableHeader",   fg (V.color240 166 166 166)  `V.withStyle` V.bold)
   , (E.editAttr,               V.white `on` V.blue)
   , (E.editFocusedAttr,        V.white `on` V.blue)
   ]

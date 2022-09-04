@@ -17,7 +17,7 @@ author:             Dane Bulat
 maintainer:         dane.bulat@gmail.com
 
 -- A copyright notice.
--- copyright:
+copyright:          2022 Dane Bulat
 -- category:
 extra-source-files: CHANGELOG.md
 
@@ -64,7 +64,6 @@ library
                     , wuss
                     , vty
 
-                    -- mouse demo
                     , mtl
                     , microlens >= 0.3.0.0
                     , microlens-th
