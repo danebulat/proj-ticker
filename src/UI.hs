@@ -19,6 +19,7 @@ import qualified Brick.Focus as F
 import qualified Brick.Types as BT
 
 import Data.Default
+import Data.List (sortBy)
 import Data.Maybe (fromJust)
 import Control.Lens.TH
 import Control.Lens ((&), (^.), (.~), (.=), (%=))
@@ -40,6 +41,10 @@ import Graphics.Vty (withStyle)
 
 -- -------------------------------------------------------------------
 -- Event Handler
+
+sortTickerAlpha :: [Ticker] -> [Ticker]
+sortTickerAlpha = sortBy (\t1 t2 ->
+  compare (t2^.tckSymbolPair) (t1^.tckSymbolPair))
 
 removeTickerWithSymbol :: Text -> [Ticker] -> [Ticker]
 removeTickerWithSymbol x = filter (\t -> (t^.tckSymbolPair) /= symUpper)
@@ -81,7 +86,8 @@ appEvent e =
       threads %= \ts -> t : ts
 
     AppEvent (TickerMessage t) -> do
-      tickers %= \ts -> rebuildTickers t ts
+      -- sort tickers by symbol pair
+      tickers %= \ts -> sortTickerAlpha $ rebuildTickers t ts
 
     AppEvent (ErrorMessage err) -> do
       processingReq .= False
