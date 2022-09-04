@@ -36,6 +36,7 @@ import Format
 import WebTypes
 import UITypes
 import Sockets
+import Graphics.Vty (withStyle)
 
 -- -------------------------------------------------------------------
 -- Event Handler
@@ -127,19 +128,22 @@ appEvent e =
       if pr
         then statusText .= "error - a request is already being handled"
         else do
-          e1 <- use edit1
           ts <- use tickers
-          let contents = E.getEditContents e1
+          if length ts < 2
+            then statusText .= "error - at least one ticker must be present"
+            else do
+              e1 <- use edit1      
+              let contents = E.getEditContents e1
 
-          -- check if text is an existing ticker
-          if searchTickerSymbol (head contents) ts
-            then do processingReq .= True
-                    let symbolLower = T.toLower (head contents)
-                    chan <- use reqChan
-                    liftIO $ Sockets.writeRequests [symbolLower] "UNSUBSCRIBE" (fromJust chan)
-                    tickers %= removeTickerWithSymbol (head contents)
-                    statusText .= head contents `T.append` "removed"
-            else statusText .= head contents `T.append` " - not in current ticker list"
+              -- check if text is an existing ticker
+              if searchTickerSymbol (head contents) ts
+                then do processingReq .= True
+                        let symbolLower = T.toLower (head contents)
+                        chan <- use reqChan
+                        liftIO $ Sockets.writeRequests [symbolLower] "UNSUBSCRIBE" (fromJust chan)
+                        tickers %= removeTickerWithSymbol (head contents)
+                        statusText .= head contents `T.append` "removed"
+                else statusText .= head contents `T.append` " - not in current ticker list"
 
     -- Exit program
     VtyEvent (V.EvKey V.KEsc []) -> halt
@@ -188,8 +192,8 @@ drawTable st =
          , mkHeaders
          , B.hBorder ] <=> drawRows ts
 
-  where headers   = ["Symbols", "Open", "Close", "High", "Low", "Volume", "Traded"]
-        cols      = map (padRight Max . txt) headers
+  where headers   = ["Symbols", " 24h%", "Open", "Close", "High", "Low", "Volume", "Traded"]
+        cols      = map (withDefAttr (attrName "tableHeader") . padRight Max . txt) headers
         mkHeaders = hBox cols
         ts        = st ^. tickers
 
@@ -197,18 +201,32 @@ drawTable st =
 drawRows :: [Ticker] -> Widget Name
 drawRows = foldr (\x acc ->
     let cs  = colText x
-        cs' = map (padRight Max . txt) cs
+        cs' = map (padRight Max) cs
     in acc <=> vBox [ hBox cs', B.hBorder ]) emptyHBox
   where
     emptyHBox = hBox []
-    colText t = [ t^.tckSymbolPair
-                , fmtPicoText 4 (t^.tckOpen)
-                , fmtPicoText 4 (t^.tckClose)
-                , fmtPicoText 4 (t^.tckHigh)
-                , fmtPicoText 4 (t^.tckLow)
-                , fmtPicoText 2 (t^.tckVolume)
-                , fmtPicoText 2 (t^.tckTrades)
+    colText t = [ txt $ t^.tckSymbolPair
+                , colPct (pct t) . txt $ padPosPct (fmtPicoText 2 (pct t)) `T.append` "%"
+                , txt $ fmtPicoText 4 (t^.tckOpen)
+                , txt $ fmtPicoText 4 (t^.tckClose)
+                , txt $ fmtPicoText 4 (t^.tckHigh)
+                , txt $ fmtPicoText 4 (t^.tckLow)
+                , txt $ fmtPicoText 2 (t^.tckVolume)
+                , txt $ fmtPicoText 2 (t^.tckTrades)
                 ]
+      where diff t = 100 * (t^.tckClose - t^.tckOpen)
+            pct t = diff t / (t^.tckOpen)
+
+            -- style percentage values appropriately
+            colPct v
+              | abs v < 0.01 = withDefAttr (attrName "neutral")
+              | v > 0        = withDefAttr (attrName "plusTicker")
+              | otherwise    = withDefAttr (attrName "minusTicker")
+
+            -- prefix space character to positive percentages
+            padPosPct t
+              | T.head t /= '-' = " " `T.append` t
+              | otherwise       = t
 
 -- edit box
 drawEditor :: AppState -> Widget Name
@@ -251,7 +269,6 @@ drawInfoLayer' st = withDefAttr (attrName "info")
                   $ hBox [ C.hCenter $ vLimit 1 $ txt msg ]
   where msg = st ^. statusText
 
-
 -- -------------------------------------------------------------------
 -- App Cursor 
 -- https://hackage.haskell.org/package/brick-1.1/docs/Brick-Focus.html#v:focusRingCursor
@@ -264,11 +281,13 @@ appCursor = F.focusRingCursor (^.focusRing)
 
 theMap :: AttrMap
 theMap = attrMap V.defAttr
-  [ (attrName "plusTicker",    fg V.brightGreen)
+  [ (attrName "neutral",       fg V.brightBlue)
+  , (attrName "plusTicker",    fg V.brightGreen)
   , (attrName "minusTicker",   fg V.brightRed)
   , (attrName "buttonEnable",  V.black `on` V.cyan)
   , (attrName "buttonDisable", V.black `on` V.color240 77 77 77)
   , (attrName "info",          V.white `on` V.color240 64 0 128)
+  , (attrName "tableHeader",   fg (V.color240 166 166 166)  `withStyle` V.bold)
   , (E.editAttr,               V.white `on` V.blue)
   , (E.editFocusedAttr,        V.white `on` V.blue)
   ]
