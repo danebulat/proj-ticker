@@ -47,6 +47,7 @@ library
                     , hspec
                     , aeson
                     , bytestring
+                    , clock
                     , containers
                     , data-default
                     , formatting
@@ -89,6 +90,7 @@ test-suite proj-ticker-test
                     , formatting
                     , hspec
                     , lens
+                    , clock
                     , containers
                     , QuickCheck
                     , random

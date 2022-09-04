@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use ?~" #-}
 
@@ -33,6 +32,7 @@ import Data.Text.Zipper (clearZipper)
 import Data.Map (Map)
 import qualified Network.WebSockets as WS
 import qualified Graphics.Vty as V
+import qualified System.Clock as Clock
 
 import Format
 import WebTypes
@@ -42,6 +42,21 @@ import Graphics.Vty (withStyle)
 
 -- -------------------------------------------------------------------
 -- Event Handler
+
+-- takes a symbol and checks if it's in the removal buffer
+isInRemoveBuffer :: Text -> [(Text, Clock.TimeSpec)] -> Bool
+isInRemoveBuffer sym = foldr (\x acc ->
+  if acc then acc else T.toUpper sym == fst x) False
+
+updateRemoveBuffer :: Clock.TimeSpec -> [(Text, Clock.TimeSpec)] -> [(Text, Clock.TimeSpec)]
+updateRemoveBuffer curTime = filter (go curTime)
+  where
+    go ct x = let start   = snd x
+                  nSecs   = Clock.toNanoSecs (ct - start)
+                  seconds = fromIntegral nSecs / (10^9)
+              in seconds < duration
+    duration = 10.0  -- remove symbol from buffer after 10 seconds
+
 
 vp1Scroll :: ViewportScroll Name
 vp1Scroll = viewportScroll VP1
@@ -89,8 +104,19 @@ appEvent e =
       threads %= \ts -> t : ts
 
     AppEvent (TickerMessage t) -> do
-      -- sort tickers by symbol pair
-      tickers %= \ts -> sortTickerAlpha $ rebuildTickers t ts
+      curTime <- liftIO $ Clock.getTime Clock.Monotonic
+
+      -- update the remove buffer
+      removeBuffer %= \rb -> if null rb then rb
+        else updateRemoveBuffer curTime rb
+
+      -- update ticker only if its not in the remove buffer
+      rb <- use removeBuffer
+      if isInRemoveBuffer (t^.tckSymbolPair) rb
+        then return ()
+        else
+          -- sort tickers by symbol pair
+          tickers %= \ts -> sortTickerAlpha $ rebuildTickers t ts
 
     AppEvent (ErrorMessage err) -> do
       processingReq .= False
@@ -113,6 +139,7 @@ appEvent e =
       if pr
         then statusText .= "error - a request is already being handled"
         else do
+          -- get text from editor
           e1 <- use edit1
           ts <- use tickers
           let contents = E.getEditContents e1
@@ -122,15 +149,21 @@ appEvent e =
             then statusText .= head contents `T.append` " - already added!"
             else do
               -- validate symbol
-              if validateSymbol (head contents)
-                then do processingReq .= True
-                        -- write request
-                        chan <- use reqChan
-                        liftIO $ Sockets.writeRequests contents "SUBSCRIBE" (fromJust chan)
-                        edit1 %= E.applyEdit clearZipper
-                        statusText .= head contents `T.append` " request sent"
-                else statusText .= head contents
+              if not $ validateSymbol (head contents)
+                then statusText .= head contents
                        `T.append` " - validation failed! Enter a valid symbol."
+                else do
+                  -- check if symbol is in remove buffer
+                  rb <- use removeBuffer
+                  if isInRemoveBuffer (T.toUpper . T.strip . head $ contents) rb
+                    then statusText .= head contents `T.append` " - wait a few more seconds to add this symbol again"
+                    else do
+                      processingReq .= True
+                      -- write request
+                      chan <- use reqChan
+                      liftIO $ Sockets.writeRequests contents "SUBSCRIBE" (fromJust chan)
+                      edit1 %= E.applyEdit clearZipper
+                      statusText .= head contents `T.append` " request sent"
 
     -- F3
     VtyEvent (V.EvKey (V.KFun 3) []) -> do
@@ -153,7 +186,14 @@ appEvent e =
                         liftIO $ Sockets.writeRequests [symbolLower] "UNSUBSCRIBE" (fromJust chan)
                         tickers %= removeTickerWithSymbol (head contents)
                         edit1 %= E.applyEdit clearZipper
-                        statusText .= head contents `T.append` "removed"
+
+                        -- add symbol and current time to remove buffer
+                        curTime <- liftIO $ Clock.getTime Clock.Monotonic
+                        removeBuffer %= \rb -> (T.toUpper $ head contents, curTime) : rb
+
+                        -- update status line
+                        rb <- use removeBuffer
+                        statusText .= head contents `T.append` " - removed"
                 else statusText .= head contents `T.append` " - not in current ticker list"
 
     -- Scroll viewport
@@ -322,6 +362,7 @@ initialState reqChan =
   , _edit1         = E.editor Edit1 (Just 1) ""
   , _statusText    = "F2/F3 to add/remove symbol pair"
   , _processingReq = False
+  , _removeBuffer  = []
   }
 
 main :: IO ()

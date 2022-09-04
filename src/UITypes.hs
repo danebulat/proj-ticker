@@ -12,6 +12,7 @@ import qualified Network.WebSockets as WS
 import qualified Brick.Widgets.Edit as E
 import qualified Brick.Focus as F
 import Data.Map (Map)
+import qualified System.Clock as C
 import WebTypes
 
 -- -------------------------------------------------------------------
@@ -31,7 +32,17 @@ data AppState = AppState
   , _focusRing     :: F.FocusRing Name
   , _edit1         :: E.Editor Text Name
   , _statusText    :: Text
-  , _processingReq :: Bool 
+  , _processingReq :: Bool
+
+    -- Remove Buffer 
+    -- A removed symbol will be cached in this buffer for
+    -- some time. Its used to prevent adding late Ticker data
+    -- received from WSS after that ticker symbol has been
+    -- removed.
+    --
+    -- The removed symbol cannot be re-added during the buffer.
+    -- This will be communicated in the status line.
+  , _removeBuffer  :: [(Text, C.TimeSpec)]
   }
 
 data CustomEvent
