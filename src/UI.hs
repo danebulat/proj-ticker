@@ -32,7 +32,7 @@ import Data.Text.Zipper (clearZipper)
 import Data.Map (Map)
 import qualified Network.WebSockets as WS
 import qualified Graphics.Vty as V
-import qualified System.Clock as Clock
+import System.Clock (Clock(Monotonic), getTime, TimeSpec, toNanoSecs)
 
 import Format
 import WebTypes
@@ -41,26 +41,24 @@ import Sockets
 import Graphics.Vty (withStyle)
 
 -- -------------------------------------------------------------------
--- Event Handler
+-- Functions called in event handlers
 
 -- takes a symbol and checks if it's in the removal buffer
-isInRemoveBuffer :: Text -> [(Text, Clock.TimeSpec)] -> Bool
+isInRemoveBuffer :: Text -> [(Text, TimeSpec)] -> Bool
 isInRemoveBuffer sym = foldr (\x acc ->
   if acc then acc else T.toUpper sym == fst x) False
 
-updateRemoveBuffer :: Clock.TimeSpec -> [(Text, Clock.TimeSpec)] -> [(Text, Clock.TimeSpec)]
+-- removes any symbol that the remove buffer has cached for over 10 seconds
+updateRemoveBuffer :: TimeSpec -> [(Text, TimeSpec)] -> [(Text, TimeSpec)]
 updateRemoveBuffer curTime = filter (go curTime)
   where
     go ct x = let start   = snd x
-                  nSecs   = Clock.toNanoSecs (ct - start)
+                  nSecs   = toNanoSecs (ct - start)
                   seconds = fromIntegral nSecs / (10^9)
               in seconds < duration
     duration = 10.0  -- remove symbol from buffer after 10 seconds
 
-
-vp1Scroll :: ViewportScroll Name
-vp1Scroll = viewportScroll VP1
-
+-- sort tickers alphabetically using the symbol pair
 sortTickerAlpha :: [Ticker] -> [Ticker]
 sortTickerAlpha = sortBy (\t1 t2 ->
   compare (t2^.tckSymbolPair) (t1^.tckSymbolPair))
@@ -69,6 +67,7 @@ removeTickerWithSymbol :: Text -> [Ticker] -> [Ticker]
 removeTickerWithSymbol x = filter (\t -> (t^.tckSymbolPair) /= symUpper)
   where symUpper = T.toUpper x
 
+-- validates editor text when adding a symbol pair
 validateSymbol :: Text -> Bool
 validateSymbol ts = isAlpha && noSpaces && goodLength
   where validChars = ['A'..'Z'] ++ ['a'..'z']
@@ -94,23 +93,31 @@ rebuildTickers t ts
   where
     target = t ^. tckSymbolPair
 
+vp1Scroll :: ViewportScroll Name
+vp1Scroll = viewportScroll VP1
+
+-- -------------------------------------------------------------------
+-- Event Handler
+
 appEvent :: BrickEvent Name CustomEvent -> EventM Name AppState ()
 appEvent e =
   case e of
-    -- Custom app events
+    -- cache connection in app state
     AppEvent (CacheConnection c) -> conn .= Just c
 
+    -- cache threadIds in app state
     AppEvent (CacheThreadId t) -> do
       threads %= \ts -> t : ts
 
+    -- handle received table tickers
     AppEvent (TickerMessage t) -> do
-      curTime <- liftIO $ Clock.getTime Clock.Monotonic
+      curTime <- liftIO $ getTime Monotonic
 
-      -- update the remove buffer
+      -- update the removal buffer
       removeBuffer %= \rb -> if null rb then rb
         else updateRemoveBuffer curTime rb
 
-      -- update ticker only if its not in the remove buffer
+      -- update ticker only if its not in the removal buffer
       rb <- use removeBuffer
       if isInRemoveBuffer (t^.tckSymbolPair) rb
         then return ()
@@ -118,22 +125,24 @@ appEvent e =
           -- sort tickers by symbol pair
           tickers %= \ts -> sortTickerAlpha $ rebuildTickers t ts
 
+    -- wss error received
     AppEvent (ErrorMessage err) -> do
       processingReq .= False
       statusText .= (T.pack . show $ err)
 
+    -- wss response received
     AppEvent (ResponseMessage res) -> do
       processingReq .= False
       statusText .= (T.pack . show $ res)
 
-    -- Tab keys (change focus)
+    -- tab keys (change focus)
     VtyEvent (V.EvKey (V.KChar '\t') []) ->
       focusRing %= F.focusNext
 
     VtyEvent (V.EvKey V.KBackTab []) ->
       focusRing %= F.focusPrev
 
-    -- F2
+    -- handle F2 key press
     VtyEvent (V.EvKey (V.KFun 2) []) -> do
       pr <- use processingReq
       if pr
@@ -146,17 +155,16 @@ appEvent e =
 
           -- check if contents is an existing ticker
           if searchTickerSymbol (head contents) ts
-            then statusText .= head contents `T.append` " - already added!"
+            then statusText .= head contents `T.append` " is already added!"
             else do
               -- validate symbol
               if not $ validateSymbol (head contents)
-                then statusText .= head contents
-                       `T.append` " - validation failed! Enter a valid symbol."
+                then statusText .= "validation failed! Enter a valid symbol."
                 else do
-                  -- check if symbol is in remove buffer
+                  -- check if symbol is in removal buffer
                   rb <- use removeBuffer
                   if isInRemoveBuffer (T.toUpper . T.strip . head $ contents) rb
-                    then statusText .= head contents `T.append` " - wait a few more seconds to add this symbol again"
+                    then statusText .= "wait a few more seconds to add this symbol again"
                     else do
                       processingReq .= True
                       -- write request
@@ -165,7 +173,7 @@ appEvent e =
                       edit1 %= E.applyEdit clearZipper
                       statusText .= head contents `T.append` " request sent"
 
-    -- F3
+    -- handle f3 key press
     VtyEvent (V.EvKey (V.KFun 3) []) -> do
       pr <- use processingReq
       if pr
@@ -187,25 +195,25 @@ appEvent e =
                         tickers %= removeTickerWithSymbol (head contents)
                         edit1 %= E.applyEdit clearZipper
 
-                        -- add symbol and current time to remove buffer
-                        curTime <- liftIO $ Clock.getTime Clock.Monotonic
+                        -- add symbol and current time to removal buffer
+                        curTime <- liftIO $ getTime Monotonic
                         removeBuffer %= \rb -> (T.toUpper $ head contents, curTime) : rb
 
                         -- update status line
                         rb <- use removeBuffer
-                        statusText .= head contents `T.append` " - removed"
-                else statusText .= head contents `T.append` " - not in current ticker list"
+                        statusText .= head contents `T.append` " removed"
+                else statusText .= head contents `T.append` " is not in current ticker list"
 
-    -- Scroll viewport
+    -- scroll viewport
     VtyEvent (V.EvKey (V.KFun 4) []) -> vScrollBy vp1Scroll 1
 
     VtyEvent (V.EvKey (V.KFun 5) []) -> vScrollBy vp1Scroll (-1)
 
-    -- Exit program
+    -- exit program
     VtyEvent (V.EvKey V.KEsc []) -> halt
     VtyEvent (V.EvKey (V.KChar 'q') []) -> halt
 
-    -- Handle editor widget
+    -- handle editor widget
     ev -> do
       r <- use focusRing
       case F.focusGetCurrent r of
@@ -309,7 +317,7 @@ drawButtons st = padLeft (Pad 1) $ hBox $ padRight (Pad 1) <$> buttons
           txt key <+>
           withDefAttr attr (padLeftRight 1 $ txt label)
 
--- draw status "info" bar
+-- draw status line
 drawInfoLayer :: AppState -> Widget Name
 drawInfoLayer st = Widget Fixed Fixed $ do
   c <- getContext
@@ -320,6 +328,7 @@ drawInfoLayer st = Widget Fixed Fixed $ do
          $ C.hCenter
          $ txt msg
 
+-- alternative function to draw status line
 drawInfoLayer' :: AppState -> Widget Name
 drawInfoLayer' st = withDefAttr (attrName "info")
                   $ hBox [ C.hCenter $ vLimit 1 $ txt msg ]
