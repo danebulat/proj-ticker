@@ -37,6 +37,7 @@ library
     other-modules:    WebTypes
                     , Format
                     , UITypes
+                    , Utils
                     , Sockets
                     , TableDemo
                     , MouseDemo
@@ -79,6 +80,7 @@ test-suite proj-ticker-test
                     , Format
                     , Sockets
                     , UITypes
+                    , Utils
     ghc-options:      -Wall -fwarn-tabs
     build-depends:    base ^>=4.14.3.0
                     , proj-ticker

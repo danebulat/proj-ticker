@@ -4,12 +4,9 @@
 
 module UI where
 
-import Control.Concurrent (ThreadId)
 import Control.Concurrent.STM (newTChanIO)
 import Control.Concurrent.STM.TChan (TChan)
 import Brick
-import Brick.Widgets.Table
-import Brick.Widgets.Center
 import qualified Brick.BChan as BC
 import qualified Brick.Widgets.Border as B
 import qualified Brick.Widgets.Center as C
@@ -17,83 +14,24 @@ import qualified Brick.Widgets.Edit as E
 import qualified Brick.Focus as F
 import qualified Brick.Types as BT
 
-import Data.Default
-import Data.List (sortBy)
 import Data.Maybe (fromJust)
 import Control.Lens.TH
-import Control.Lens ((&), (^.), (.~), (.=), (%=))
+import Control.Lens ((^.), (.=), (%=))
 import Lens.Micro.Mtl (use)
 
-import Control.Monad.Trans.Class (lift)
 import Control.Monad.IO.Class (liftIO)
-import Data.Text (Text, pack)
+import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Zipper (clearZipper)
-import Data.Map (Map)
 import qualified Network.WebSockets as WS
 import qualified Graphics.Vty as V
-import System.Clock (Clock(Monotonic), getTime, TimeSpec, toNanoSecs)
+import System.Clock (Clock(Monotonic), getTime)
 
 import Format
 import WebTypes
 import UITypes
 import Sockets
-
--- -------------------------------------------------------------------
--- Functions called in event handlers
-
--- takes a symbol and checks if it's in the removal buffer
-isInRemoveBuffer :: Text -> [(Text, TimeSpec)] -> Bool
-isInRemoveBuffer sym = foldr (\x acc ->
-  if acc then acc else T.toUpper sym == fst x) False
-
--- removes any symbol that the remove buffer has cached for over 10 seconds
-updateRemoveBuffer :: TimeSpec -> [(Text, TimeSpec)] -> [(Text, TimeSpec)]
-updateRemoveBuffer curTime = filter (go curTime)
-  where
-    go ct x = let start   = snd x
-                  nSecs   = toNanoSecs (ct - start)
-                  seconds = fromIntegral nSecs / (10^9)
-              in seconds < duration
-    duration = 10.0  -- remove symbol from buffer after 10 seconds
-
--- sort tickers alphabetically using the symbol pair
-sortTickerAlpha :: [Ticker] -> [Ticker]
-sortTickerAlpha = sortBy (\t1 t2 ->
-  compare (t2^.tckSymbolPair) (t1^.tckSymbolPair))
-
-removeTickerWithSymbol :: Text -> [Ticker] -> [Ticker]
-removeTickerWithSymbol x = filter (\t -> (t^.tckSymbolPair) /= symUpper)
-  where symUpper = T.toUpper x
-
--- validates editor text when adding a symbol pair
-validateSymbol :: Text -> Bool
-validateSymbol ts = isAlpha && noSpaces && goodLength
-  where validChars = ['A'..'Z'] ++ ['a'..'z']
-        isAlpha = foldr (\x acc ->
-          if not acc then acc else x `elem` validChars) True (T.unpack ts)
-        noSpaces = ' ' `notElem` T.unpack ts
-        goodLength = T.length ts > 4
-
-searchTickerSymbol :: Text -> [Ticker] -> Bool
-searchTickerSymbol t =
-  foldr (\x acc -> if acc then acc else T.toUpper t == x ^. tckSymbolPair) False
-
-searchTicker :: Ticker -> [Ticker] -> Bool
-searchTicker t = foldr (\x acc ->
-    if acc then acc else x ^. tckSymbolPair == target) False
-  where target = t ^. tckSymbolPair
-
-rebuildTickers :: Ticker -> [Ticker] -> [Ticker]
-rebuildTickers t ts
-  | null ts = [t]
-  | searchTicker t ts = map (\x -> if x ^. tckSymbolPair == target then t else x) ts
-  | otherwise = t : ts
-  where
-    target = t ^. tckSymbolPair
-
-vp1Scroll :: ViewportScroll Name
-vp1Scroll = viewportScroll VP1
+import Utils
 
 -- -------------------------------------------------------------------
 -- Event Handler
@@ -221,6 +159,12 @@ appEvent e =
         _          -> return ()
 
 -- -------------------------------------------------------------------
+-- Viewport
+
+vp1Scroll :: ViewportScroll Name
+vp1Scroll = viewportScroll VP1
+
+-- -------------------------------------------------------------------
 -- UI
 
 brickApp :: App AppState CustomEvent Name
@@ -237,7 +181,7 @@ drawUI s = [ui s]
 
 ui :: AppState -> Widget Name
 ui st = if null (st ^. tickers)
-         then center $ txt "connecting..."
+         then C.center $ txt "connecting..."
          else
            vBox [ hBox [ vBox [ C.hCenterLayer (padTop (Pad 2)
                 $ padBottom (Pad 2)
@@ -397,6 +341,6 @@ main = do
   print "> killed threads"
 
   -- safely close connection
-  WS.sendClose (fromJust $ finalState ^. conn) (pack "Bye!")
+  WS.sendClose (fromJust $ finalState ^. conn) ("Bye!" :: Text)
   print "> killed connection"
 
