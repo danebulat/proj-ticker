@@ -82,64 +82,45 @@ appEvent e =
     -- handle F2 key press
     VtyEvent (V.EvKey (V.KFun 2) []) -> do
       pr <- use processingReq
-      if pr
-        then statusText .= "error - a request is already being handled"
-        else do
-          -- get text from editor
-          e1 <- use edit1
-          ts <- use tickers
-          let contents = E.getEditContents e1
+      e1 <- use edit1
+      ts <- use tickers
+      rb <- use removeBuffer
 
-          -- check if contents is an existing ticker
-          if searchTickerSymbol (head contents) ts
-            then statusText .= head contents `T.append` " is already added!"
-            else do
-              -- validate symbol
-              if not $ validateSymbol (head contents)
-                then statusText .= "validation failed! Enter a valid symbol."
-                else do
-                  -- check if symbol is in removal buffer
-                  rb <- use removeBuffer
-                  if isInRemoveBuffer (T.toUpper . T.strip . head $ contents) rb
-                    then statusText .= "wait a few more seconds to add this symbol again"
-                    else do
-                      processingReq .= True
-                      -- write request
-                      chan <- use reqChan
-                      liftIO $ Sockets.writeRequests contents "SUBSCRIBE" (fromJust chan)
-                      edit1 %= E.applyEdit clearZipper
-                      statusText .= head contents `T.append` " request sent"
+      let contents = head $ E.getEditContents e1
+      let (passed, err) = validateAddRequest pr ts contents rb
+
+      if not passed then statusText .= mkStatusText (fromJust err)
+      else do
+        -- write request
+        processingReq .= True
+        chan <- use reqChan
+        liftIO $ Sockets.writeRequests [contents] "SUBSCRIBE" (fromJust chan)
+        edit1 %= E.applyEdit clearZipper
+        statusText .= mkStatusText SuccRequestSent `T.append` contents
 
     -- handle f3 key press
     VtyEvent (V.EvKey (V.KFun 3) []) -> do
       pr <- use processingReq
-      if pr
-        then statusText .= "error - a request is already being handled"
-        else do
-          ts <- use tickers
-          if length ts < 2
-            then statusText .= "error - at least one ticker must be present"
-            else do
-              e1 <- use edit1      
-              let contents = E.getEditContents e1
+      ts <- use tickers
+      e1 <- use edit1
 
-              -- check if text is an existing ticker
-              if searchTickerSymbol (head contents) ts
-                then do processingReq .= True
-                        let symbolLower = T.toLower (head contents)
-                        chan <- use reqChan
-                        liftIO $ Sockets.writeRequests [symbolLower] "UNSUBSCRIBE" (fromJust chan)
-                        tickers %= removeTickerWithSymbol (head contents)
-                        edit1 %= E.applyEdit clearZipper
+      let contents = head $ E.getEditContents e1
+      let (passed, err) = validateRemoveRequest pr ts contents
+      
+      if not passed then statusText .= mkStatusText (fromJust err)
+      else do
+        processingReq .= True
+        let symbolLower = T.toLower contents
+        chan <- use reqChan
+        
+        tickers %= removeTickerWithSymbol contents
+        edit1 %= E.applyEdit clearZipper
+        liftIO $ Sockets.writeRequests [symbolLower] "UNSUBSCRIBE" (fromJust chan)
 
-                        -- add symbol and current time to removal buffer
-                        curTime <- liftIO $ getTime Monotonic
-                        removeBuffer %= \rb -> (T.toUpper $ head contents, curTime) : rb
-
-                        -- update status line
-                        rb <- use removeBuffer
-                        statusText .= head contents `T.append` " removed"
-                else statusText .= head contents `T.append` " is not in current ticker list"
+        -- add symbol and current time to removal buffer
+        curTime <- liftIO $ getTime Monotonic
+        removeBuffer %= \rb -> (T.toUpper contents, curTime) : rb
+        statusText .= contents `T.append` mkStatusText SuccRequestSent
 
     -- scroll viewport
     VtyEvent (V.EvKey (V.KFun 4) []) -> vScrollBy vp1Scroll 1

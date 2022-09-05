@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Utils where 
 
 import Control.Lens 
@@ -6,6 +8,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import System.Clock (TimeSpec, toNanoSecs)
 import WebTypes
+import UITypes
 
 -- -------------------------------------------------------------------
 -- Functions called in event handlers
@@ -65,3 +68,42 @@ rebuildTickers t ts
   | otherwise = t : ts
   where
     target = t ^. tckSymbolPair
+
+-- | Status line text messages.
+mkStatusText :: StatusLineMsg -> Text
+mkStatusText ErrProcessingReq         = "A request is already being handled."
+mkStatusText ErrTickerAlreadyAdded    = "The typed symbol is already added."
+mkStatusText ErrValidationFailed      = "Validation failed. Enter a valid symbol pair."
+mkStatusText ErrSymbolInRemovalBuffer = "Wait a few more seconds to add this symbol again."
+mkStatusText ErrTickerListLength      = "At least one ticker must be present."
+mkStatusText ErrNotInTickerList       = "The typed symbol pair is not in the ticker list."
+mkStatusText SuccRequestSent          = "Request sent for "
+mkStatusText SuccTickerRemoved        = " has been removed."
+
+-- | Checks for some potential conditions that prevent removing
+-- a ticker.
+validateRemoveRequest :: Bool
+                      -> [Ticker]
+                      -> Text
+                      -> (Bool, Maybe StatusLineMsg)
+validateRemoveRequest processingReq ts sym
+  | processingReq                   = (False, Just ErrProcessingReq)
+  | length ts < 2                   = (False, Just ErrTickerListLength)
+  | not (searchTickerSymbol sym ts) = (False, Just ErrNotInTickerList)
+  | otherwise                       = (True, Nothing)
+
+-- | Checks for some potential conditions that prevent adding
+-- a ticker.
+validateAddRequest :: Bool
+                   -> [Ticker]
+                   -> Text
+                   -> [(Text, TimeSpec)]
+                   -> (Bool, Maybe StatusLineMsg)
+validateAddRequest processingReq ts sym rb
+  | processingReq             = (False, Just ErrProcessingReq)
+  | searchTickerSymbol sym ts = (False, Just ErrTickerAlreadyAdded)
+  | not (validateSymbol sym)  = (False, Just ErrValidationFailed)
+  | isInRemoveBuffer
+    ( T.toUpper
+    . T.strip $ sym) rb       = (False, Just ErrSymbolInRemovalBuffer)
+  | otherwise                 = (True, Nothing)

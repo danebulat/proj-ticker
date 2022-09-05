@@ -21,6 +21,17 @@ import WebTypes
 -- named resources 
 data Name = Edit1 | VP1 | AddBtn | RemoveBtn  deriving (Ord, Show, Eq)
 
+-- status line messages
+data StatusLineMsg
+  = ErrProcessingReq
+  | ErrTickerAlreadyAdded
+  | ErrValidationFailed
+  | ErrSymbolInRemovalBuffer
+  | ErrTickerListLength
+  | ErrNotInTickerList
+  | SuccRequestSent
+  | SuccTickerRemoved
+
 -- app state
 data AppState = AppState
   { _tickers   :: [Ticker]
