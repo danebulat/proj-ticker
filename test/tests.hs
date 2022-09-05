@@ -15,82 +15,83 @@ import WebTypes
 
 -- encoding a server request 
 testEncodeSrq :: Bool
-testEncodeSrq = encode srqSample == srqBs
+testEncodeSrq = encode sServerReq == sServerReqEnc
 
 -- decoding a server request
 testDecodeSrq :: Bool
-testDecodeSrq = decode srqBs == Just srqSample
+testDecodeSrq = decode sServerReqEnc == Just sServerReq
 
 -- encoding a server response 
 testEncodeSrp :: Bool
-testEncodeSrp = encode srpSample == srpBs
+testEncodeSrp = encode sServerResp == sServerRespEnc
 
 -- decoding a server response 
 testDecodeSrp :: Bool
-testDecodeSrp = decode srpBs' == Just srpSample
+testDecodeSrp = decode sServerRespEnc' == Just sServerResp
 
 -- decoding a server error
 testDecodeServerError :: Bool
-testDecodeServerError = decode srvErrBs == Just srvErrSample
+testDecodeServerError = decode sServerErrorEnc == Just sServerError
 
 -- decoding a ticker 
 testDecodeTicker :: Bool
-testDecodeTicker = decode tickerBs == Just tickerSample
+testDecodeTicker = decode sTickerEnc == Just sTicker
 
 -- decoding a server message
 testDecodeSrvMsg :: Bool
 testDecodeSrvMsg =
-  let r1 = MsgResponse (fromJust $ decode srpBs')   == MsgResponse srpSample
-      r2 = MsgError    (fromJust $ decode srvErrBs) == MsgError srvErrSample
-      r3 = MsgTicker   (fromJust $ decode tickerBs) == MsgTicker tickerSample
+  let r1 = MsgResponse (fromJust $ decode sServerRespEnc')   == MsgResponse sServerResp
+      r2 = MsgError    (fromJust $ decode sServerErrorEnc) == MsgError sServerError
+      r3 = MsgTicker   (fromJust $ decode sTickerEnc) == MsgTicker sTicker
   in r1 && r2 && r3
 
 -- -------------------------------------------------------------------
 -- Sample Data
 
 -- encoded server request
-srqBs :: B.ByteString
-srqBs = [r|{"id":1,"method":"SUBSCRIBE","params":["btcusdt@miniTicker"]}|]
+sServerReqEnc :: B.ByteString
+sServerReqEnc = [r|{"id":1,"method":"SUBSCRIBE","params":["btcusdt@miniTicker"]}|]
 
 -- server request
-srqSample :: ServerRequest
-srqSample = ServerRequest
+sServerReq :: ServerRequest
+sServerReq = ServerRequest
     { _srqRequestId = 1
     , _srqMethod    = "SUBSCRIBE"
     , _srqParams    = ["btcusdt@miniTicker"]
     }
 
 -- server response
-srpSample :: ServerResponse
-srpSample = ServerResponse { _srpRequestId = 1 , _srpResult = [] }
+sServerResp :: ServerResponse
+sServerResp = ServerResponse { _srpRequestId = 1 , _srpResult = [] }
 
 -- encoded server response
-srpBs, srpBs' :: B.ByteString
-srpBs  = [r|{"result":[],"id":1}|]
-srpBs' = [r|{"result":null,"id":1}|]
+sServerRespEnc, sServerRespEnc' :: B.ByteString
+sServerRespEnc  = [r|{"result":[],"id":1}|]
+sServerRespEnc' = [r|{"result":null,"id":1}|]
 
 -- server error
-srvErrSample :: ServerError
-srvErrSample = ServerError 2 "invalid request."
+sServerError :: ServerError
+sServerError = ServerError 2 "invalid request."
 
 -- encoded server error 
-srvErrBs :: B.ByteString
-srvErrBs = [r|{"code": 2, "msg": "invalid request."}|]
+sServerErrorEnc :: B.ByteString
+sServerErrorEnc = [r|{"code": 2, "msg": "invalid request."}|]
 
--- encoded ticker
-tickerBs :: B.ByteString
-tickerBs = [r|{""s": "BTCUSDT",
+-- encoded ticker (encodes in alphabetical order by key)
+sTickerEnc :: B.ByteString
+sTickerEnc = [r|{
 "E": 123456789,
-"o": "0.0010",
 "c": "0.0025",
 "h": "0.0025",
 "l": "0.0010",
-"v": "10000",
-"q": "18"}|]
+"o": "0.0010",
+"q": "18",
+"s": "BTCUSDT",
+"v": "10000"}|]
 
--- ticker
-tickerSample :: Ticker
-tickerSample = Ticker
+-- ticker sample
+sTicker :: Ticker
+sTicker = Ticker
   { _tckSymbolPair = "BTCUSDT"
   , _tckTs         = 123456789
   , _tckOpen       = 0.0010
